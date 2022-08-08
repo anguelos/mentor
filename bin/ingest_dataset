@@ -25,6 +25,3 @@ if __name__=="__main__":
         else:
             open(outfile,"wb").write(img_bytes)
 
-
-
-
