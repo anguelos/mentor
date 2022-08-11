@@ -38,10 +38,10 @@ def iterate_classification_epoch(net, dataloader, evaluator:TormetingEvaluator, 
         if is_training:
                 pass # TODO (anguelos) conditional context manager
                 net.train(False)
-                caption = f"{render_status} (Training)"
+                caption = f"{render_status(net)} (Training)"
         else:
                 net.train(True)
-                caption = f"{render_status} (Training)"
+                caption = f"{render_status(net)} (Validating)"
         evaluator.reset()
         if verbocity > 0:
                 progress_bar = lambda x:tqdm.tqdm(x, desc=caption)
