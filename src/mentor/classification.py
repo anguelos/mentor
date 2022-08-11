@@ -25,7 +25,7 @@ def create_classification_model(archname, n_classes, pretrained=True, freeze_lay
         for param in list(net.parameters())[:freeze_layers_before]:
                 param.requires_grad = False
         net = net.to(device)
-        net.status = (0, 0., 0.) # Epoch, Train Error, Validation Error
+        net.status = (0, 0., 0.) # Epoch, Validation Error, Train Error
         net.args_history = {}
         net.train_history = []
         net.validation_history = {}
