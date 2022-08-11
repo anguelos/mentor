@@ -13,7 +13,7 @@ default_transform = torchvision.transforms.Compose([
 
 
 class FolderClassificationDs:
-        def __init__(self, file_list, class_names="", class_level=-2, filter_re=None, input_transform=default_transform ) -> None:
+        def __init__(self, file_list, class_names="", class_level=-2, filter_re=None, input_transform=default_transform, balance_through_duplication ) -> None:
                 self.class_level=class_level
                 if filter_re is not None:
                         regex = re.compile(filter_re)
