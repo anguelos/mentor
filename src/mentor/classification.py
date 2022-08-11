@@ -8,7 +8,11 @@ import tqdm
 
 def render_status(net):
         epoch, val, train = net.status
-        return f"E:{epoch:5}, V:{val*100:6.2f}%, T:{train*100:6.2f}%"
+        try:
+                result =  f"E:{epoch:5}, V:{val*100:6.2f}%, T:{train*100:6.2f}%"
+        except:
+                result = "STATUS N/A"
+        return result
 
 
 def create_classification_model(archname, n_classes, pretrained=True, freeze_layers_before=0, device="cuda"):
