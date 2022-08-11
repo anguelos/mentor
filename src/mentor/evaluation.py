@@ -54,6 +54,6 @@ class TwoClassEvaluator():
                 return repr(outputs)
 
         def single_metric(self):
-                self.digest()['Accuracy']
+                return self.digest()['Accuracy']
                 
                 
