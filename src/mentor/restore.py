@@ -20,7 +20,6 @@ def resume_classification(args, fname):
                 net.train_history = save_dict["train_history"]
                 net.validation_history = save_dict["validation_history"]
                 net.best_weights = save_dict["best_weights"]
-
         except FileNotFoundError:
                 warn(f"could not load {fname}")
         return net
