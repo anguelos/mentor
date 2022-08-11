@@ -34,8 +34,8 @@ class TwoClassEvaluator():
         
         def digest(self):
                 result = {}
-                y_score = torch.cat(self.predictions, dim=0)
-                y_true = torch.cat(self.targets, dim=0)
+                y_score = torch.cat(self.y_score, dim=0)
+                y_true = torch.cat(self.y_true, dim=0)
                 if self.loss_fn is not None:
                         with torch.no_grad():
                                 losses = self.loss_fn(y_score, y_true).sum()
@@ -52,5 +52,5 @@ class TwoClassEvaluator():
 
         def single_metric(self):
                 self.digest()['Accuracy']
-                f"{(self.digest()['Accuracy']*100):6.2f}"
+                
                 
