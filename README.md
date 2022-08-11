@@ -1,4 +1,4 @@
-### Dataset curation
+### Dataset curration
 In order to utilise data they must be ingested
 
 ```bash
@@ -11,6 +11,9 @@ export PYTHONPATH="./src"
 
 ### TODO
 * make archives (zip, rar, etc) ingestable for folder datasets
+* Make classifcation dataset auto balacing 
+* Add tormetor augmentations
+* Debug metrics
 
 
 #### Simple training of a classifier
@@ -22,5 +25,5 @@ wget http://143.50.30.95:7999/datasets/papal_v1.zip
 # unzip it
 unzip papal_v1.zip
 # train a classifier
-PYTHONPATH="./src" ./bin/mnt_train -h
+PYTHONPATH="./src" ./bin/mnt_train 
 ```
