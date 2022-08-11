@@ -23,9 +23,10 @@ class TormetingEvaluator():
 
 
 class TwoClassEvaluator():
-        def __init__(self, loss_fn=None, roc_step=.01):
+        def __init__(self, loss_fn=None, roc_step=.01, epsilon=.000000001):
                 self.loss_fn = loss_fn
                 self.reset()
+                self.epsilon = epsilon
 
         def reset(self):
                 self.y_true = []
@@ -52,13 +53,14 @@ class TwoClassEvaluator():
                 tp = ((y_pred==y_true) & (y_pred>.5)).astype(float).sum()
                 fp = ((y_pred!=y_true) & (y_pred>.5)).astype(float).sum()
                 tn = ((y_pred==y_true) & (y_pred<.5)).astype(float).sum()
-                recall = tp /(tp+tn)
-                precision = tp /(tp+fp)
+                fn = ((y_pred!=y_true) & (y_pred<.5)).astype(float).sum()
+                recall = tp /(self.epsilon + tp + tn)
+                precision = tp /(self.epsilon + tp + fp)
                 f1 = (2*recall*precision)/(recall+precision)
 
                 #f1 = sklearn.metrics.f1_score(y_true=y_true, y_pred=y_score)
                 accuracy = ((y_pred>.5) == (y_true>.5)).astype("float").mean()
-                result.update({"ROC AUC": roc_auc, "Accuracy": accuracy, "F1":f1, "recall":recall, "precision":precision})
+                result.update({"ROC AUC": roc_auc, "Accuracy": accuracy, "F1":f1, "recall":recall, "precision":precision,"TP":tp, "FP":fp,"TN":tn,"FN":fn})
                 return result
         
         def __str__(self):
