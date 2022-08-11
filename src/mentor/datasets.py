@@ -1,4 +1,5 @@
 import re
+from tkinter.messagebox import NO
 import torch
 from pathlib import Path
 from PIL import Image
@@ -13,7 +14,7 @@ default_transform = torchvision.transforms.Compose([
 
 
 class FolderClassificationDs:
-        def __init__(self, file_list, class_names="", class_level=-2, filter_re=None, input_transform=default_transform, balance_through_duplication ) -> None:
+        def __init__(self, file_list, class_names="", class_level=-2, filter_re=None, input_transform=default_transform, duplications=(1,1) ) -> None:
                 self.class_level=class_level
                 if filter_re is not None:
                         regex = re.compile(filter_re)
@@ -33,6 +34,8 @@ class FolderClassificationDs:
                         self.input_transform = lambda x:x
                 else:
                         self.input_transform = input_transform
+                if duplications!=(1,1):
+                        raise NotImplementedError
 
 
         def __getitem__(self, n:int) -> torch.Tensor:
