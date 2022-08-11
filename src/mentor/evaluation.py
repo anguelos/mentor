@@ -31,7 +31,7 @@ class TwoClassEvaluator():
         def update(self, predictions, targets):
                 predictions = torch.nn.functional.softmax(predictions,dim=1)[:, 0]
                 self.y_score.append(predictions.detach())
-                self.y_true.append(targets.detach())
+                self.y_true.append(targets.detach().float())
         
         def digest(self):
                 result = {}
