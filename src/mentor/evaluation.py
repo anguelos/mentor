@@ -29,9 +29,9 @@ class TwoClassEvaluator():
                 self.y_score = []
 
         def update(self, predictions, targets):
-                predictions = torch.nn.functional.softmax(predictions,dim=1)[:, 0]
+                
                 self.y_score.append(predictions.detach())
-                self.y_true.append(targets.detach().float())
+                self.y_true.append(targets.detach())
         
         def digest(self):
                 result = {}
@@ -41,6 +41,8 @@ class TwoClassEvaluator():
                         with torch.no_grad():
                                 losses = self.loss_fn(y_score, y_true).sum()
                         result["loss"] = losses.cpu().numpy()
+                y_score = torch.nn.functional.softmax(y_score,dim=1)[:, 0]
+                y_true = y_true.float()
                 y_score, y_true = y_score.cpu().numpy(), y_true.cpu().numpy() 
                 roc_auc = sklearn.metrics.roc_auc_score(y_true=y_true, y_score=y_score)
                 accuracy = ((y_score>.5) == y_true).mean()
