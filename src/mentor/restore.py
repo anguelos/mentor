@@ -4,7 +4,7 @@ from .classification import create_classification_model
 
 
 def save(fname,net):
-        save_dict = {"weights":net.state_dict(),"args_history":net.args_history, "train_history":net.train_history, "validation_history":net.validation_history, "best_weights":net.best_weights, "status":net.status}
+        save_dict = {"weights":net.state_dict(),"args_history":net.args_history, "train_history":net.train_history, "validation_history":net.validation_history, "best_weights":net.best_weights, "status":net.status, "class_names": net.class_names}
         torch.save(save_dict,open(fname,"wb"))
 
 
@@ -12,6 +12,7 @@ def resume_classification(args, fname):
         net = create_classification_model(archname=args.arch, n_classes=args.n_classes, pretrained=args.pretrained, freeze_layers_before=args.freeze_all_before, device=args.device)
         try:
                 save_dict = torch.load(open(fname,"rb"), map_location=torch.device(args.device))
+                net.class_names = save_dict["class_names"]
                 net.load_state_dict(save_dict["weights"])
                 new_epoch = len(save_dict["train_history"])
                 save_dict["args_history"][new_epoch] = args
@@ -22,4 +23,7 @@ def resume_classification(args, fname):
                 net.best_weights = save_dict["best_weights"]
         except FileNotFoundError:
                 warn(f"could not load {fname}")
+        if "class_names" in args.__dict__.keys():  #  TODO (anguelos)  clarify this design pattern
+                class_names = tuple(args.class_names.split(","))
+                assert (class_names == net.class_names) or len(net.class_names) == 0
         return net

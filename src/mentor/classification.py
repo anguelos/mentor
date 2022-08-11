@@ -15,7 +15,7 @@ def render_status(net):
         return result
 
 
-def create_classification_model(archname, n_classes, pretrained=True, freeze_layers_before=0, device="cuda"):
+def create_classification_model(archname, n_classes, pretrained=True, freeze_layers_before=0, device="cuda", class_names=""):
         if archname.lower() == "resnet50":
                 net=torchvision.models.resnet50(pretrained=pretrained)
                 net.fc=torch.nn.Linear(in_features=2048, out_features=n_classes, bias=True)
@@ -30,6 +30,13 @@ def create_classification_model(archname, n_classes, pretrained=True, freeze_lay
                 param.requires_grad = False
         net = net.to(device)
         net.status = (0, 0., 0.) # Epoch, Validation Error, Train Error
+        if class_names == "":
+                net.class_names = tuple([f"cl_{n}" for n in range(n_classes)])
+        else:
+                class_names = tuple(class_names.split("\n"))
+                if len(net.class_names) != 0 and class_names != net.clas_names:
+                        assert net.class_names == class_names
+
         net.args_history = {}
         net.train_history = []
         net.validation_history = {}
@@ -37,7 +44,7 @@ def create_classification_model(archname, n_classes, pretrained=True, freeze_lay
         return net
 
 
-def iterate_classification_epoch(net, dataloader, evaluator:TormetingEvaluator, loss_fn=None, optimizer=None, device="cuda", verbocity=1):
+def iterate_classification_epoch(net, dataloader, evaluator:TormetingEvaluator, loss_fn=None, optimizer=None, device="cuda", verbocity=1, class_names=""):
         is_training = optimizer is not None
         if is_training:
                 pass # TODO (anguelos) conditional context manager
