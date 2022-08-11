@@ -23,8 +23,8 @@ class TwoClassEvaluator():
                 self.y_score = []
 
         def update(self, predictions, targets):
-                self.y_score.append(predictions)
-                self.y_true.append(targets)
+                self.y_score.append(predictions.detach())
+                self.y_true.append(targets.detach())
         
         def digest(self):
                 result = {}
