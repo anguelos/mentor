@@ -25,5 +25,5 @@ def resume_classification(args, fname):
                 warn(f"could not load {fname}")
         if "class_names" in args.__dict__.keys():  #  TODO (anguelos)  clarify this design pattern
                 class_names = tuple(args.class_names.split(","))
-                assert (class_names == net.class_names) or len(net.class_names) == 0
+                assert (len(net.class_names) == 0) or (class_names == net.class_names)
         return net
