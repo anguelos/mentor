@@ -21,6 +21,7 @@ def resume_classification(fname, args=None, device="", arch="", n_classes=0, pre
         else:
                 warn(f"could not load {fname}")
                 save_dict={}
+                valid_args = SimpleNamespace()
         if arch == "" and arch in valid_args.__dict__:
                 arch = valid_args.arch
         if arch == "":
