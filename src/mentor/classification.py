@@ -44,6 +44,7 @@ def create_classification_model(arch, n_classes, pretrained=True, freeze_layers_
 
 
 def iterate_classification_epoch(net, dataloader, evaluator:TormetingEvaluator, loss_fn=None, optimizer=None, device="cuda", verbocity=1, class_names=""):
+        net = net.to(device)
         is_training = optimizer is not None
         if is_training:
                 pass # TODO (anguelos) conditional context manager
