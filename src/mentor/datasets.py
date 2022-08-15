@@ -5,6 +5,7 @@ from pathlib import Path
 from PIL import Image
 from copy import copy
 import torchvision
+from collections import defaultdict
 
 
 default_transform = torchvision.transforms.Compose([
@@ -42,9 +43,26 @@ class FolderClassificationDs:
                 img = Image.open(self.files[n])
                 return self.input_transform(img), self.class_ids[n]
                 
-
         def __len__(self) -> int:
                 return len(self.class_ids)
         
         def __repr__(self):
                 return f"FolderClassificationDs({repr(self.files)},{self.class_level},{repr(','.join(self.class_names))})"
+        
+        def print_all(self, line_prefix=""):
+                samples = sorted(zip(self.class_ids, self.files))
+                print(f"{line_prefix}Samples:")
+                for n , (id, file) in enumerate(samples):
+                        print(f"{line_prefix}{n : >7}: {self.class_names[id] : >10} {file}")
+                samples_per_class = defaultdict(lambda:[])
+                for class_id, file in samples:
+                        samples_per_class[class_id].append(file)
+                print(f"{line_prefix}Classes:")
+                for id, file_list in samples_per_class.items():
+                        print(f"{line_prefix}{id:>3} {self.class_names[id]:>10} {len(file_list)} files.")
+        
+        def overlap(self, ds):
+                overlaping = set(ds.files).intersection(set(self.files))
+                return sorted(overlaping)
+
+

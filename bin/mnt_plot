@@ -24,7 +24,7 @@ def plot_history(net, var_names="Train/Accuracy/100,Validation/Accuracy/100", ca
         xy = [(k,v[variable]) for k, v in sorted(history[mode].items())]
         y = np.array([epoch[1] for epoch in xy])
         x = np.array([epoch[0] for epoch in xy])
-        axes.plot(x, y*scaler, label=rename(var_name))
+        axes.plot(x, y*scaler, label=f"{rename(mode)}: {rename(variable)}")
     axes.legend()
     if caption !="":
         axes.set_title(rename(caption))
@@ -40,6 +40,6 @@ if __name__ == "__main__":
     }
     args, _ = fargv.fargv(p)
     net = resume_classification(args.resume_path, args)
-    figure = plot_history(net,var_names=args.variables, caption="Training")
+    figure = plot_history(net,var_names=args.variables, caption=args.caption)
     if args.output == "":
         plt.show()
