@@ -22,7 +22,7 @@ def resume_classification(fname, args=None, device="", arch="", n_classes=0, pre
                 save_dict={}
                 args_dict = {}
                 if args is not None:
-                        args_dict.update(args.__dict__))
+                        args_dict.update(args.__dict__)
         valid_args = SimpleNamespace(**args_dict)
         if arch == "" and arch in valid_args.__dict__:
                 arch = valid_args.arch
