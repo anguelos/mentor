@@ -1,6 +1,6 @@
 import sklearn.metrics
 import torch
-
+import numpy as np
 
 class TormetingEvaluator():
         def reset(self):
@@ -22,7 +22,7 @@ class TormetingEvaluator():
                 raise NotImplementedError
 
 
-class TwoClassEvaluator(TormetingEvaluator):
+class ClassificationEvaluator(TormetingEvaluator):
         def __init__(self, loss_fn=None, roc_step=.01, epsilon=.000000001):
                 self.loss_fn = loss_fn
                 self.reset()
@@ -47,8 +47,14 @@ class TwoClassEvaluator(TormetingEvaluator):
                         result["loss"] = losses.cpu().numpy()
                 y_pred = torch.nn.functional.softmax(y_pred,dim=1)[:, 0]
                 y_true = y_true.float()
-                y_pred, y_true = y_pred.cpu().numpy(), y_true.cpu().numpy() 
-                roc_auc = sklearn.metrics.roc_auc_score(y_true=y_true, y_score=y_pred)
+                y_pred, y_true = y_pred.cpu().numpy(), y_true.cpu().numpy()
+                try:
+                        roc_auc = sklearn.metrics.roc_auc_score(y_true=y_true, y_score=y_pred, multi_class='ovr')
+                except np.AxisError: 
+                        # sklearn ROC AUC not fully implemented for multiclass
+                        #https://stackoverflow.com/questions/59666138/sklearn-roc-auc-score-with-multi-class-ovr-should-have-none-average-available
+                        roc_auc = -1.
+
                 
                 tp = ((y_pred==y_true) & (y_pred>.5)).astype(float).sum()
                 fp = ((y_pred!=y_true) & (y_pred>.5)).astype(float).sum()
