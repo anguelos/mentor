@@ -2,6 +2,9 @@ import sklearn.metrics
 import torch
 import numpy as np
 
+epsilon = .000000000000001
+
+
 class TormetingEvaluator():
         def reset(self):
                 pass
@@ -20,6 +23,55 @@ class TormetingEvaluator():
 
         def single_metric(self):
                 raise NotImplementedError
+
+
+
+class ClassificationAccuracy(TormetingEvaluator):
+        def reset(self):
+                self.correct = 0
+                self.total = 0
+        def update(self, predictions, targets):
+                assert len(predictions.size()) == 2 and len(targets.size())==1 and predictions.size(0) == targets.size(0)
+                _, argmax = predictions.max(dim=1)
+                self.correct += (argmax == targets).sum().item()
+                self.total += argmax.size(0)
+        def digest(self)->dict:
+                return {"Accuracy": self.correct/(self.total + epsilon)}
+        def single_metric(self):
+                return self.digest()["Accuracy"]
+
+
+class ClassificationConfusion(TormetingEvaluator):
+        def reset(self):
+                self.predictions = []
+                self.targets = []
+
+        def update(self, predictions, targets):
+                assert len(predictions.size()) == 2 and len(targets.size())==1 and predictions.size(0) == targets.size(0)
+                _, argmax = predictions.max(dim=1)
+                self.correct += (argmax == targets).sum().item()
+                self.total += argmax.size(0)
+        def digest(self)->dict:
+                return {"Accuracy": self.correct/(self.total + epsilon)}
+        def single_metric(self):
+                return self.digest()["Accuracy"]
+
+
+class ClassificationF1(TormetingEvaluator):
+        def reset(self):
+                self.correct = 0
+                self.total = 0
+
+        def update(self, predictions, targets):
+                assert len(predictions.size()) == 2 and len(targets.size())==1 and predictions.size(0) == targets.size(0)
+                _, argmax = predictions.max(dim=1)
+                self.correct += (argmax == targets).sum().item()
+                self.total += argmax.size(0)
+
+        def digest(self)->dict:
+                return {"Value": self.correct/(self.total + epsilon)}
+
+
 
 
 class ClassificationEvaluator(TormetingEvaluator):

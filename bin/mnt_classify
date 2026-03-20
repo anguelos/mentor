@@ -10,7 +10,7 @@ from PIL import Image
 import numpy as np
 #from types import SimpleNamespace
 #t_args = Union[SimpleNamespace, dict]
-from mentor import resume_classification, FolderClassificationDs, current_epoch, iterate_classification_epoch, TwoClassEvaluator, save
+from mentor import resume_classification, FolderClassificationDs, current_epoch, iterate_classification_epoch, ClassificationEvaluator, save
 
 default_transform = torchvision.transforms.Compose([
         torchvision.transforms.transforms.Resize(512), 

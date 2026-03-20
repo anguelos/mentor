@@ -39,7 +39,7 @@ class FolderClassificationDs:
                         raise NotImplementedError
         def get_class_frequencies(self):
                 hist = torch.zeros(len(self.class_names))
-                torch.scatter_add(self.class_ids)
+                torch.scatter_add(self.class_ids, )
 
 
 
