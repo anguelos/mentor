@@ -307,7 +307,7 @@ class Mentee(nn.Module):
         """
         raise NotImplementedError
 
-    def training_step(self, sample: Any) -> Tuple[torch.Tensor, Dict[str, float]]:
+    def training_step(self, sample: Any, loss_fn=None) -> Tuple[torch.Tensor, Dict[str, float]]:
         """Compute the loss for a single training sample or mini-batch.
 
         Called inside :meth:`train_epoch`.  The returned tensor must be
@@ -341,8 +341,14 @@ class Mentee(nn.Module):
         """
         raise NotImplementedError
 
-    def validation_step(self, sample: Any) -> Dict[str, float]:
+    def validation_step(self, sample: Any, loss_fn=None) -> Dict[str, float]:
         """Evaluate the model on a single validation sample or mini-batch.
+
+        Defaults to calling :meth:`training_step` with the same arguments,
+        so subclasses that only implement :meth:`training_step` get
+        validation for free.  Override when the validation forward pass
+        differs from training (e.g. different augmentation, TTA, beam
+        search).
 
         Called inside :meth:`validate_epoch` under ``torch.no_grad()``.
         The **first key** of the returned dict is used as the principal
@@ -352,26 +358,24 @@ class Mentee(nn.Module):
         ----------
         sample : Any
             One element yielded by the validation DataLoader.
+        loss_fn : callable, optional
+            Loss function forwarded to :meth:`training_step`.
 
         Returns
         -------
         dict[str, float]
-            Scalar evaluation metrics.
-
-        Raises
-        ------
-        NotImplementedError
-            Always raised by the base implementation.
+            Scalar evaluation metrics (may include ``"loss"``).
 
         Examples
         --------
-        >>> def validation_step(self, sample):
+        >>> # default: no override needed if training_step covers both
+        >>> def validation_step(self, sample, loss_fn=None):  # custom override
         ...     x, y = sample
         ...     logits = self(x.to(self.device))
         ...     acc = (logits.argmax(1) == y.to(self.device)).float().mean().item()
         ...     return {"acc": acc}
         """
-        raise NotImplementedError
+        return self.training_step(sample, loss_fn)
 
     def preprocess(self, raw_input: Any) -> Any:
         """Transform a raw input into a model-ready tensor.

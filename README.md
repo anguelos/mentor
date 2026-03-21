@@ -32,7 +32,7 @@ pip install mentor
 Or from source:
 
 ```bash
-git clone https://github.com/yourname/mentor
+git clone https://github.com/anguelos/mentor
 pip install -e mentor/
 ```
 
