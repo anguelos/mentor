@@ -1,0 +1,40 @@
+# ── Runtime ────────────────────────────────────────────────────────────────
+torch
+torchvision
+tqdm
+tensorboard
+matplotlib
+seaborn
+fargv
+
+# ── Build ──────────────────────────────────────────────────────────────────
+setuptools>=61
+wheel
+build          # PEP 517 frontend: python -m build
+
+# ── Publish ────────────────────────────────────────────────────────────────
+twine          # twine upload dist/*
+
+# ── Testing ────────────────────────────────────────────────────────────────
+pytest
+pytest-cov
+
+# ── Type checking ──────────────────────────────────────────────────────────
+mypy
+types-tqdm
+
+# ── Linting & formatting ───────────────────────────────────────────────────
+ruff           # linting + import sorting
+black          # formatting
+
+# ── Interactive development ────────────────────────────────────────────────
+ipython
+jupyter
+# ── Docs ───────────────────────────────────────────────────────────────────
+sphinx
+sphinx-rtd-theme
+sphinx-autodoc-typehints
+myst-parser
+sphinx-copybutton
+nbsphinx
+readthedocs-sphinx-ext
