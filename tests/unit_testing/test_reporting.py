@@ -230,3 +230,169 @@ def test_plot_history_missing_metric_skipped(tmp_path):
     fig = plot_history(["train/nonexistent"], [p])
     assert isinstance(fig, plt.Figure)
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# _colorize_report
+# ---------------------------------------------------------------------------
+
+from mentor.reporting import _colorize_report, _param_tree_lines
+
+
+def test_colorize_report_ok_line():
+    report = "Importable:    OK (found in 'mentor')"
+    colored = _colorize_report(report)
+    assert "\033[32m" in colored   # green for OK
+
+
+def test_colorize_report_not_importable():
+    report = "Importable:    NOT importable (no module)"
+    colored = _colorize_report(report)
+    assert "\033[31m" in colored   # red
+
+
+def test_colorize_report_present():
+    report = "Optimizer state:    present"
+    colored = _colorize_report(report)
+    assert "\033[32m" in colored
+
+
+def test_colorize_report_absent():
+    report = "Optimizer state:    absent"
+    colored = _colorize_report(report)
+    assert "\033[33m" in colored   # yellow
+
+
+def test_colorize_report_frozen_tag():
+    colored = _colorize_report("  some layer  [frozen]")
+    assert "\033[31m" in colored
+
+
+def test_colorize_report_unfrozen_tag():
+    colored = _colorize_report("  some layer  [unfrozen]")
+    assert "\033[32m" in colored
+
+
+def test_colorize_report_mixed_tag():
+    colored = _colorize_report("  some layer  [mixed]")
+    assert "\033[90m" in colored
+
+
+def test_colorize_report_section_header():
+    report = "Architecture (inferred from state_dict):"
+    colored = _colorize_report(report)
+    assert "\033[36m" in colored   # cyan
+
+
+def test_colorize_report_empty_line():
+    assert _colorize_report("") == ""
+
+
+def test_colorize_report_tree_line_not_dimmed():
+    """Lines with box-drawing chars should not be wrapped in DIM."""
+    line = "  ├── net.fc1  (100 params)  [frozen]"
+    colored = _colorize_report(line)
+    assert "\033[2m" not in colored
+
+
+# ---------------------------------------------------------------------------
+# _param_tree_lines
+# ---------------------------------------------------------------------------
+
+def _minimal_state_dict():
+    m = torch.nn.Linear(4, 2)
+    return {k: v for k, v in m.state_dict().items()}
+
+
+def test_param_tree_lines_basic():
+    sd = {"fc.weight": torch.zeros(2, 4), "fc.bias": torch.zeros(2)}
+    lines = _param_tree_lines(sd, frozen_modules=set())
+    assert any("fc" in l for l in lines)
+
+
+def test_param_tree_lines_frozen_tag():
+    sd = {"fc.weight": torch.zeros(2, 4), "fc.bias": torch.zeros(2)}
+    lines = _param_tree_lines(sd, frozen_modules={"fc"})
+    assert any("[frozen]" in l for l in lines)
+
+
+def test_param_tree_lines_unfrozen_tag():
+    sd = {"fc.weight": torch.zeros(2, 4), "fc.bias": torch.zeros(2)}
+    lines = _param_tree_lines(sd, frozen_modules=set())
+    assert any("[unfrozen]" in l for l in lines)
+
+
+def test_param_tree_lines_mixed_tag():
+    sd = {
+        "a.weight": torch.zeros(2, 4),
+        "b.weight": torch.zeros(2, 4),
+    }
+    # freeze only "a" — module at root level has mixed children
+    # make a two-child parent by nesting
+    sd2 = {
+        "net.a.weight": torch.zeros(2, 4),
+        "net.b.weight": torch.zeros(2, 4),
+    }
+    lines = _param_tree_lines(sd2, frozen_modules={"net.a"})
+    assert any("[mixed]" in l for l in lines)
+
+
+def test_param_tree_lines_with_layer_names_filter():
+    sd = {
+        "fc.weight": torch.zeros(2, 4),
+        "fc.bias":   torch.zeros(2),
+        "buf":       torch.zeros(3),   # buffer without a module entry
+    }
+    layer_names = ["fc"]
+    lines = _param_tree_lines(sd, frozen_modules=set(), layer_names=layer_names)
+    # "buf" has no parent in layer_names so it's filtered out
+    assert not any("buf" in l for l in lines)
+
+
+# ---------------------------------------------------------------------------
+# get_report_str verbose=True
+# ---------------------------------------------------------------------------
+
+def test_get_report_str_verbose_contains_layer_tree(tmp_path):
+    m = LeNetMentee()
+    path = tmp_path / "m.pt"
+    m.save(path)
+    report = get_report_str(str(path), verbose=True)
+    assert "Layer tree:" in report
+    assert "net" in report
+
+
+def test_get_report_str_verbose_with_frozen(tmp_path):
+    m = LeNetMentee()
+    m.freeze("net.fc3")
+    path = tmp_path / "m.pt"
+    m.save(path)
+    report = get_report_str(str(path), verbose=True)
+    assert "[frozen]" in report
+
+
+def test_get_report_str_colors_enabled(tmp_path):
+    m = LeNetMentee()
+    path = tmp_path / "m.pt"
+    m.save(path)
+    report = get_report_str(str(path), render_colors=True)
+    assert "\033[" in report   # some ANSI escape present
+
+
+def test_get_report_str_with_inference_state(tmp_path):
+    m = LeNetMentee()
+    m.register_inference_state("labels", list(range(10)))
+    path = tmp_path / "m.pt"
+    m.save(path)
+    report = get_report_str(str(path))
+    assert "labels" in report
+
+
+def test_get_report_str_with_history(tmp_path, trained_model):
+    model, opt, sched = trained_model
+    path = tmp_path / "trained.pt"
+    model.save(path, optimizer=opt, lr_scheduler=sched)
+    report = get_report_str(str(path))
+    assert "Epochs trained:" in report
+    assert "Epochs validated:" in report
+    assert "Optimizer state:" in report

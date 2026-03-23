@@ -358,3 +358,44 @@ class TestCachedProperties:
         assert isinstance(m.optimizer, torch.optim.Adam)
         assert isinstance(m.lr_scheduler, torch.optim.lr_scheduler.StepLR)
         assert isinstance(m.loss_fn, nn.MSELoss)
+
+
+# ---------------------------------------------------------------------------
+# Classifier / Regressor — uncovered branches
+# ---------------------------------------------------------------------------
+
+def test_classifier_step_with_explicit_loss_fn():
+    """Covers the loss_fn-is-not-None branch in Classifier.default_training_step."""
+    m = _SimpleClassifier()
+    m.create_train_objects()
+    x, y = _clf_batch()
+    custom_loss = nn.CrossEntropyLoss(label_smoothing=0.1)
+    loss, metrics = m.training_step((x, y), loss_fn=custom_loss)
+    assert "loss" in metrics
+
+
+def test_regressor_step_with_explicit_loss_fn():
+    """Covers the loss_fn-is-not-None branch in Regressor.default_training_step."""
+    m = _SimpleRegressor()
+    m.create_train_objects()
+    x, y = _reg_batch()
+    custom_loss = nn.L1Loss()
+    loss, metrics = m.training_step((x, y), loss_fn=custom_loss)
+    assert "loss" in metrics
+
+
+def test_classifier_overwrite_default_loss():
+    """Covers overwrite_default_loss=True branch in Classifier.create_train_objects."""
+    m = _SimpleClassifier()
+    m.create_train_objects()
+    new_loss = nn.CrossEntropyLoss(label_smoothing=0.05)
+    m.create_train_objects(loss_fn=new_loss, overwrite_default_loss=True)
+    assert m.loss_fn is new_loss
+
+
+def test_regressor_overwrite_default_loss():
+    m = _SimpleRegressor()
+    m.create_train_objects()
+    new_loss = nn.L1Loss()
+    m.create_train_objects(loss_fn=new_loss, overwrite_default_loss=True)
+    assert m.loss_fn is new_loss

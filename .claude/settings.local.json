@@ -34,7 +34,8 @@
       "Bash(for y:*)",
       "Bash(do echo:*)",
       "Read(//home/anguelos_ro/workspace/src/mentor/examples/binarization/all_dibco/**)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(python -m pytest tests/ --cov=mentor --cov-report=term-missing --cov-branch -q)"
     ]
   }
 }

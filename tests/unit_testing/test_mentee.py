@@ -878,3 +878,297 @@ def test_transformed_explicit_roundtrip_restores_original():
     buf.seek(0)
     loaded = _ExplicitTransformed.resume(buf, model_class=_ExplicitTransformed)
     assert loaded._constructor_params == {"num_classes": 4}
+
+
+# ---------------------------------------------------------------------------
+# fit()
+# ---------------------------------------------------------------------------
+
+def test_fit_runs_epochs(lenet, train_loader):
+    lenet.create_train_objects(lr=1e-3)
+    lenet.fit(train_loader, epochs=2)
+    assert lenet.current_epoch == 2
+
+
+def test_fit_with_val_data(lenet, train_loader, val_loader):
+    lenet.create_train_objects(lr=1e-3)
+    lenet.fit(train_loader, val_data=val_loader, epochs=1)
+    assert len(lenet._validate_history) == 1
+
+
+def test_fit_creates_train_objects_if_missing(lenet, train_loader):
+    assert lenet.optimizer is None
+    lenet.fit(train_loader, epochs=1, lr=1e-3)
+    assert lenet.optimizer is not None
+
+
+def test_fit_returns_self(lenet, train_loader):
+    lenet.create_train_objects()
+    result = lenet.fit(train_loader, epochs=1)
+    assert result is lenet
+
+
+def test_fit_saves_checkpoint(lenet, train_loader, tmp_path):
+    lenet.create_train_objects()
+    path = tmp_path / "fit.pt"
+    lenet.fit(train_loader, epochs=1, checkpoint_path=path)
+    assert path.exists()
+
+
+def test_fit_early_stopping(lenet, train_loader, val_loader):
+    lenet.create_train_objects()
+    # patience=1 should stop quickly when val metric doesn't improve
+    lenet.fit(train_loader, val_data=val_loader, epochs=20, patience=1)
+    assert lenet.current_epoch < 20
+
+
+def test_fit_verbose_does_not_crash(lenet, train_loader, val_loader, capsys):
+    lenet.create_train_objects()
+    lenet.fit(train_loader, val_data=val_loader, epochs=1, verbose=True)
+    out = capsys.readouterr().out
+    assert "epoch" in out
+
+
+# ---------------------------------------------------------------------------
+# find_lr()
+# ---------------------------------------------------------------------------
+
+def test_find_lr_returns_dict_with_lrs_and_losses(lenet, train_loader):
+    lenet.create_train_objects()
+    result = lenet.find_lr(train_loader, num_iter=5)
+    assert "lrs" in result
+    assert "losses" in result
+    assert len(result["lrs"]) == len(result["losses"])
+    assert len(result["lrs"]) > 0
+
+
+def test_find_lr_lrs_are_increasing(lenet, train_loader):
+    lenet.create_train_objects()
+    result = lenet.find_lr(train_loader, start_lr=1e-5, end_lr=1.0, num_iter=10)
+    lrs = result["lrs"]
+    assert all(lrs[i] < lrs[i + 1] for i in range(len(lrs) - 1))
+
+
+def test_find_lr_does_not_change_weights(lenet, train_loader):
+    lenet.create_train_objects()
+    w_before = lenet.net.fc3.weight.clone()
+    lenet.find_lr(train_loader, num_iter=5)
+    assert torch.equal(lenet.net.fc3.weight, w_before)
+
+
+def test_find_lr_does_not_change_epoch(lenet, train_loader):
+    lenet.create_train_objects()
+    epoch_before = lenet.current_epoch
+    lenet.find_lr(train_loader, num_iter=5)
+    assert lenet.current_epoch == epoch_before
+
+
+def test_find_lr_without_trainer(train_loader):
+    """Model with no trainer — falls back to plain Adam."""
+    class _NoTrainer(Mentee):
+        def __init__(self):
+            super().__init__()
+            self.fc = nn.Linear(784, 10)
+        def forward(self, x):
+            return self.fc(x.flatten(1))
+        def training_step(self, batch):
+            import torch.nn.functional as F
+            x, y = batch
+            loss = F.cross_entropy(self(x), y)
+            return loss, {"loss": loss.item()}
+
+    m = _NoTrainer()
+    result = m.find_lr(train_loader, num_iter=5)
+    assert len(result["lrs"]) > 0
+
+
+def test_find_lr_stops_on_divergence(lenet, train_loader):
+    """Very high end_lr should trigger early stop."""
+    lenet.create_train_objects()
+    result = lenet.find_lr(train_loader, start_lr=1.0, end_lr=1e6,
+                           num_iter=50, diverge_threshold=2.0)
+    assert len(result["lrs"]) < 50
+
+
+# ---------------------------------------------------------------------------
+# make_mentee decorator
+# ---------------------------------------------------------------------------
+
+def test_make_mentee_creates_mentee_subclass():
+    from mentor import make_mentee
+    from mentor.trainers import Classifier
+
+    @make_mentee(trainer=Classifier)
+    class _Tiny(nn.Module):
+        def __init__(self, n: int = 4):
+            super().__init__(n=n)
+            self.fc = nn.Linear(n, 2)
+        def forward(self, x):
+            return self.fc(x)
+
+    m = _Tiny(n=4)
+    assert isinstance(m, Mentee)
+
+
+def test_make_mentee_sets_trainer():
+    from mentor import make_mentee
+    from mentor.trainers import Classifier
+
+    @make_mentee(trainer=Classifier)
+    class _Tiny(nn.Module):
+        def __init__(self, n: int = 4):
+            super().__init__(n=n)
+            self.fc = nn.Linear(n, 2)
+        def forward(self, x):
+            return self.fc(x)
+
+    m = _Tiny(n=4)
+    assert isinstance(m.trainer, Classifier)
+
+
+def test_make_mentee_captures_constructor_params():
+    from mentor import make_mentee
+
+    @make_mentee()
+    class _Tiny(nn.Module):
+        def __init__(self, n: int = 4, bias: bool = True):
+            super().__init__(n=n, bias=bias)
+            self.fc = nn.Linear(n, 2, bias=bias)
+        def forward(self, x):
+            return self.fc(x)
+
+    m = _Tiny(n=8, bias=False)
+    assert m._constructor_params == {"n": 8, "bias": False}
+
+
+def test_make_mentee_roundtrip(tmp_path):
+    from mentor import make_mentee
+    from mentor.trainers import Classifier
+
+    @make_mentee(trainer=Classifier)
+    class _Tiny(nn.Module):
+        def __init__(self, n: int = 4):
+            super().__init__(n=n)
+            self.fc = nn.Linear(n, 2)
+        def forward(self, x):
+            return self.fc(x)
+
+    m = _Tiny(n=6)
+    path = tmp_path / "tiny.pt"
+    m.save(path)
+    loaded = _Tiny.resume(path, model_class=_Tiny)
+    assert loaded._constructor_params == {"n": 6}
+
+
+# ---------------------------------------------------------------------------
+# _resolve_loss_fn — RuntimeError when no loss available
+# ---------------------------------------------------------------------------
+
+def test_resolve_loss_fn_raises_when_none():
+    class _NoLoss(Mentee):
+        def __init__(self):
+            super().__init__()
+            self.fc = nn.Linear(4, 2)
+        def forward(self, x):
+            return self.fc(x)
+        def training_step(self, batch):
+            x, _ = batch
+            loss = self._resolve_loss_fn(None)(self(x), torch.zeros(x.size(0), dtype=torch.long))
+            return loss, {}
+
+    m = _NoLoss()
+    with pytest.raises(RuntimeError, match="No loss function"):
+        m._resolve_loss_fn(None)
+
+
+# ---------------------------------------------------------------------------
+# validation_step fallback (no trainer, training_step returns non-tuple)
+# ---------------------------------------------------------------------------
+
+def test_validation_step_no_trainer_nontuple(train_loader, val_loader):
+    """validation_step default falls back to training_step; covers non-tuple return (line 730)."""
+    class _ReturnDict(Mentee):
+        def __init__(self):
+            super().__init__()
+            self.fc = nn.Linear(784, 10)
+        def forward(self, x):
+            return self.fc(x.flatten(1))
+        def training_step(self, batch, loss_fn=None):
+            # Return a plain dict (not a tuple) to hit the non-tuple branch
+            return {"acc": 0.5}
+
+    m = _ReturnDict()
+    m.create_train_objects()
+    # Manually append a fake train history entry so current_epoch > 0
+    m._train_history.append({"acc": 0.5, "memfails": 0.0})
+    metrics = m.validate_epoch(val_loader)
+    assert isinstance(metrics, dict)
+    assert "acc" in metrics
+
+
+# ---------------------------------------------------------------------------
+# __str__ with validate history but no best epoch
+# ---------------------------------------------------------------------------
+
+def test_str_last_val_without_best(lenet, train_loader, val_loader):
+    """Covers the elif self._validate_history branch in __str__."""
+    opt = lenet.create_train_objects()["optimizer"]
+    lenet.train_epoch(train_loader, opt)
+    # Manually insert val history without updating best_epoch
+    lenet._validate_history[1] = {"acc": 0.5}
+    lenet._best_epoch_so_far = -1   # force the elif branch
+    s = str(lenet)
+    assert "last val" in s
+
+
+# ---------------------------------------------------------------------------
+# resume_training auto model_class import
+# ---------------------------------------------------------------------------
+
+def test_resume_training_auto_import(trained_model, tmp_path):
+    """model_class=None triggers importlib auto-resolution."""
+    model, opt, sched = trained_model
+    path = tmp_path / "auto.pt"
+    model.save(path, optimizer=opt, lr_scheduler=sched)
+    # helpers.LeNetMentee is importable (tests/ on sys.path via conftest)
+    loaded, opt2, sched2 = LeNetMentee.resume_training(
+        path, model_class=None, lr=1e-3
+    )
+    assert loaded.current_epoch == model.current_epoch
+
+
+# ---------------------------------------------------------------------------
+# tensorboard_writer path (mock writer)
+# ---------------------------------------------------------------------------
+
+def test_train_epoch_calls_tensorboard_writer(lenet, train_loader):
+    from unittest.mock import MagicMock
+    writer = MagicMock()
+    opt = lenet.create_train_objects()["optimizer"]
+    lenet.train_epoch(train_loader, opt, tensorboard_writer=writer)
+    assert writer.add_scalar.called
+
+
+def test_validate_epoch_calls_tensorboard_writer(lenet, train_loader, val_loader):
+    from unittest.mock import MagicMock
+    writer = MagicMock()
+    opt = lenet.create_train_objects()["optimizer"]
+    lenet.train_epoch(train_loader, opt)
+    lenet.validate_epoch(val_loader, tensorboard_writer=writer)
+    assert writer.add_scalar.called
+
+
+# ---------------------------------------------------------------------------
+# validate_epoch memfail raise
+# ---------------------------------------------------------------------------
+
+def test_validate_epoch_memfail_raises(lenet, train_loader, val_loader):
+    class _OOM(LeNetMentee):
+        def validation_step(self, sample):
+            raise MemoryError("oom")
+
+    m = _OOM()
+    opt = m.create_train_objects()["optimizer"]
+    m.train_epoch(train_loader, opt)
+    with pytest.raises(MemoryError):
+        m.validate_epoch(val_loader, memfail="raise")
