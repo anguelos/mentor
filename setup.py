@@ -2,7 +2,8 @@ from pathlib import Path
 from setuptools import setup, find_packages
 
 setup(
-    name="pytorch-mentor",
+    name="torch-mentor",
+    url="https://github.com/anguelos/torch_mentor",
     long_description=Path("README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     version="0.2.2",
