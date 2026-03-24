@@ -14,7 +14,7 @@ A lightweight PyTorch training framework built around a single idea: **a model s
 ## Installation
 
 ```bash
-pip install mentor
+pip install torch-mentor
 ```
 
 Or from source:

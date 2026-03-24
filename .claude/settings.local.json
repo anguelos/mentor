@@ -1,6 +1,10 @@
 {
   "permissions": {
+	  "defaultMode": "acceptEdits",
     "allow": [
+      "Edit",
+      "Write",
+      "Bash(source /home/anguelos_ro/venvs/p312/bin/activate:*)",
       "Bash(python -m pytest tests/unit_testing/test_mentee.py::test_create_train_objects_scheduler_type tests/unit_testing/test_mentee.py::test_state_dict_architecture_lines_linear -v --tb=long)",
       "Bash(python -m pytest tests/unit_testing/test_mentee.py -q --tb=short)",
       "Bash(python -m pytest tests/unit_testing/test_reporting.py tests/checkpoint/ tests/integration/ -q --tb=short)",
@@ -35,7 +39,10 @@
       "Bash(do echo:*)",
       "Read(//home/anguelos_ro/workspace/src/mentor/examples/binarization/all_dibco/**)",
       "Bash(done)",
-      "Bash(python -m pytest tests/ --cov=mentor --cov-report=term-missing --cov-branch -q)"
+      "Bash(python -m pytest tests/ --cov=mentor --cov-report=term-missing --cov-branch -q)",
+      "Bash(python -m pytest tests/)",
+      "Bash(pip show:*)",
+      "Skill(update-config)"
     ]
   }
 }

@@ -2,10 +2,10 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath(".."))
 
-project   = "mentor"
+project   = "torch-mentor"
 author    = "mentor contributors"
 copyright = f"2024, {author}"
-release   = "0.2.0"
+release   = "0.2.2"
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -45,7 +45,7 @@ myst_enable_extensions = ["colon_fence", "deflist"]
 
 html_theme         = "sphinx_rtd_theme"
 html_static_path   = ["_static"]
-html_title         = "mentor"
+html_title         = "torch-mentor"
 html_show_sourcelink = True
 
 

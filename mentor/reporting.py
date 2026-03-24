@@ -266,12 +266,18 @@ def get_report_str(path: str, render_colors: bool = False, verbose: bool = False
         first_sw_epoch = min(software_history.keys())
         last_sw_epoch  = max(software_history.keys())
         sw0 = software_history[first_sw_epoch]
-        lines.append(f"  First (epoch {first_sw_epoch}): torch={sw0.get('torch','?')}  python={sw0.get('python','?').split()[0]}")
-        lines.append(f"              host={sw0.get('hostname','?')}  user={sw0.get('user','?')}  git={sw0.get('git_hash','?')[:12]}")
+        def _fmt_sw(label: str, sw: Dict[str, str]) -> None:
+            dirty = " (dirty)" if sw.get("git_dirty") == "true" else ""
+            lines.append(f"  {label}")
+            lines.append(f"    torch={sw.get('torch','?')}  cuda={sw.get('cuda','?')}  python={sw.get('python','?').split()[0]}")
+            lines.append(f"    mentor={sw.get('mentor_version','?')}  torchvision={sw.get('torchvision','?')}  numpy={sw.get('numpy','?')}")
+            lines.append(f"    host={sw.get('hostname','?')}  user={sw.get('user','?')}  platform={sw.get('platform','?')}")
+            lines.append(f"    git={sw.get('git_hash','?')[:12]}{dirty}  branch={sw.get('git_branch','?')}  remote={sw.get('git_remote','?')}")
+            lines.append(f"    script={sw.get('main_script','?')}")
+        _fmt_sw(f"First (epoch {first_sw_epoch}):", sw0)
         if last_sw_epoch != first_sw_epoch:
             swN = software_history[last_sw_epoch]
-            lines.append(f"  Last  (epoch {last_sw_epoch}): torch={swN.get('torch','?')}  python={swN.get('python','?').split()[0]}")
-            lines.append(f"              host={swN.get('hostname','?')}  user={swN.get('user','?')}  git={swN.get('git_hash','?')[:12]}")
+            _fmt_sw(f"Last  (epoch {last_sw_epoch}):", swN)
     lines.append("")
 
     # --- argv history ---

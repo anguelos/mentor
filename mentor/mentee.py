@@ -17,18 +17,81 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 def _get_software_snapshot() -> Dict[str, str]:
-    # collect git hash, python version, torch version, hostname, user
+    """Collect a reproducibility snapshot of the current software environment.
+
+    Fields recorded
+    ---------------
+    python, torch, mentor_version
+        Version strings for the interpreter and key libraries.
+    torchvision, numpy
+        Version strings when available; ``"unavailable"`` otherwise.
+    cuda
+        ``torch.version.cuda`` (e.g. ``"12.1"``) or ``"cpu"`` for CPU builds.
+    platform
+        OS description from :mod:`platform` (e.g. ``"Linux-6.1 x86_64"``).
+    hostname, user
+        Machine and user identity.
+    main_script
+        Absolute path to ``sys.argv[0]`` — the entry-point script.
+    git_hash
+        Full SHA-1 of ``HEAD``; ``"unavailable"`` when git is absent.
+    git_branch
+        Current branch name; helps locate the commit in a crowded history.
+    git_remote
+        URL of the ``origin`` remote; identifies the repo/fork.
+    git_dirty
+        ``"true"`` when there are uncommitted changes (hash insufficient for
+        exact reproduction), ``"false"`` otherwise.
+    """
+    import platform as _platform
+
     info: Dict[str, str] = {}
-    info["python"] = sys.version
-    info["torch"] = torch.__version__
-    info["hostname"] = socket.gethostname()
-    info["user"] = getpass.getuser()
+
+    # interpreter & libraries
+    info["python"]         = sys.version
+    info["torch"]          = torch.__version__
+    info["cuda"]           = torch.version.cuda or "cpu"
     try:
-        info["git_hash"] = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
-        ).decode().strip()
+        import mentor as _mentor
+        info["mentor_version"] = _mentor.__version__
     except Exception:
-        info["git_hash"] = "unavailable"
+        info["mentor_version"] = "unavailable"
+    try:
+        import torchvision as _tv
+        info["torchvision"] = _tv.__version__
+    except Exception:
+        info["torchvision"] = "unavailable"
+    try:
+        import numpy as _np
+        info["numpy"] = _np.__version__
+    except Exception:
+        info["numpy"] = "unavailable"
+
+    # environment
+    info["platform"]     = _platform.platform()
+    info["hostname"]     = socket.gethostname()
+    info["user"]         = getpass.getuser()
+    info["main_script"]  = str(Path(sys.argv[0]).resolve()) if sys.argv else "unavailable"
+
+    # git provenance
+    def _git(*args) -> str:
+        return subprocess.check_output(
+            ["git"] + list(args), stderr=subprocess.DEVNULL
+        ).decode().strip()
+
+    try:
+        info["git_hash"]   = _git("rev-parse", "HEAD")
+        info["git_branch"] = _git("rev-parse", "--abbrev-ref", "HEAD")
+        info["git_remote"] = _git("remote", "get-url", "origin")
+        dirty = subprocess.call(
+            ["git", "diff", "--quiet", "--exit-code"],
+            stderr=subprocess.DEVNULL
+        ) != 0
+        info["git_dirty"]  = "true" if dirty else "false"
+    except Exception:
+        for key in ("git_hash", "git_branch", "git_remote", "git_dirty"):
+            info.setdefault(key, "unavailable")
+
     return info
 
 

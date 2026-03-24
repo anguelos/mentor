@@ -2,10 +2,10 @@ from pathlib import Path
 from setuptools import setup, find_packages
 
 setup(
-    name="mentor",
+    name="torch-mentor",
     long_description=Path("README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
-    version="0.2.0",
+    version="0.2.2",
     license="MIT",
     python_requires=">=3.7",
     packages=find_packages(),
