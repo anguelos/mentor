@@ -364,7 +364,7 @@ def test_get_report_str_verbose_contains_layer_tree(tmp_path):
 
 def test_get_report_str_verbose_with_frozen(tmp_path):
     m = LeNetMentee()
-    m.freeze("net.fc3")
+    m.freeze(["net.fc3"])
     path = tmp_path / "m.pt"
     m.save(path)
     report = get_report_str(str(path), verbose=True)

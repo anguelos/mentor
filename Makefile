@@ -11,13 +11,19 @@ SETUP      = $(VENV_BIN)/python3 setup.py
 
 export PATH := $(VENV_BIN):$(PATH)
 
-.PHONY: test unittest build clean docs docs_single docs_pdf
+.PHONY: test unittest build clean docs docs_single docs_pdf testlint autolint
 
 test:
 	$(PYTEST) tests/ -q
 
 unittest:
 	$(PYTEST) tests/unit_testing/ -q --cov=mentor --cov-report=term-missing
+
+testlint:
+	$(VENV_BIN)/ruff check mentor/ tests/
+
+autolint:
+	$(VENV_BIN)/ruff check --fix mentor/ tests/
 
 build:
 	$(SETUP) sdist

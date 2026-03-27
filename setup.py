@@ -20,7 +20,6 @@ setup(
             "mypy",
             "types-tqdm",
             "ruff",
-            "black",
         ],
         "docs": [
             "sphinx",

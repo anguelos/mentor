@@ -14,7 +14,7 @@ Sections
 6.  Chaining (freeze / unfreeze return self)
 7.  Gradient / optimiser interaction (frozen params stay constant)
 8.  Checkpoint persistence (save -> resume re-applies frozen state)
-9.  _apply_layer_flags — CLI path without model instantiation
+9.  _apply_layer_flags — CLI path, instantiates model from file
 10. _immediate_children and _remove_target_from_frozen unit tests
 """
 import io
@@ -67,20 +67,20 @@ def _make_checkpoint(model, **kwargs):
 # ===========================================================================
 
 def test_freeze_single_leaf_sets_requires_grad_false(model):
-    model.freeze("net.fc1")
+    model.freeze(["net.fc1"])
     assert not model.net.fc1.weight.requires_grad
     assert not model.net.fc1.bias.requires_grad
 
 
 def test_freeze_single_leaf_leaves_others_trainable(model):
-    model.freeze("net.fc1")
+    model.freeze(["net.fc1"])
     for n, p in model.named_parameters():
         if not n.startswith("net.fc1"):
             assert p.requires_grad, n
 
 
 def test_freeze_multiple_leaves(model):
-    model.freeze("net.fc1", "net.conv1")
+    model.freeze(["net.fc1", "net.conv1"])
     fp = _frozen_params(model)
     assert "net.fc1.weight"   in fp
     assert "net.conv1.weight" in fp
@@ -88,39 +88,39 @@ def test_freeze_multiple_leaves(model):
 
 
 def test_freeze_container_freezes_all_children(model):
-    model.freeze("net")
+    model.freeze(["net"])
     assert _frozen_params(model) == set(ALL_PARAMS)
 
 
 def test_freeze_updates_frozen_modules(model):
-    model.freeze("net.fc1")
+    model.freeze(["net.fc1"])
     assert "net.fc1" in model._frozen_modules
 
 
 def test_freeze_multiple_updates_frozen_modules(model):
-    model.freeze("net.fc1", "net.conv1")
+    model.freeze(["net.fc1", "net.conv1"])
     assert "net.fc1"   in model._frozen_modules
     assert "net.conv1" in model._frozen_modules
     assert "net.fc2"   not in model._frozen_modules
 
 
 def test_freeze_idempotent(model):
-    model.freeze("net.fc1")
-    model.freeze("net.fc1")
+    model.freeze(["net.fc1"])
+    model.freeze(["net.fc1"])
     assert not model.net.fc1.weight.requires_grad
     assert model._frozen_modules == {"net.fc1"}
 
 
 def test_freeze_normalization_removes_descendant(model):
-    model.freeze("net.fc1")
-    model.freeze("net")
+    model.freeze(["net.fc1"])
+    model.freeze(["net"])
     assert "net" in model._frozen_modules
     assert "net.fc1" not in model._frozen_modules
 
 
 def test_freeze_normalization_removes_multiple_descendants(model):
-    model.freeze("net.conv1", "net.conv2", "net.fc1")
-    model.freeze("net")
+    model.freeze(["net.conv1", "net.conv2", "net.fc1"])
+    model.freeze(["net"])
     assert model._frozen_modules == {"net"}
 
 
@@ -128,37 +128,37 @@ def test_freeze_normalization_removes_multiple_descendants(model):
 # 2. unfreeze() — requires_grad and _frozen_modules
 # ===========================================================================
 
-def test_unfreeze_no_args_restores_all(model):
-    model.freeze("net")
-    model.unfreeze()
+def test_unfreeze_all_restores_all(model):
+    model.freeze(["net"])
+    model.unfreeze([".*"])
     assert _frozen_params(model) == set()
     assert model._frozen_modules  == set()
 
 
 def test_unfreeze_single_leaf(model):
-    model.freeze("net.fc1", "net.fc2")
-    model.unfreeze("net.fc1")
+    model.freeze(["net.fc1", "net.fc2"])
+    model.unfreeze(["net.fc1"])
     assert model.net.fc1.weight.requires_grad
     assert not model.net.fc2.weight.requires_grad
 
 
 def test_unfreeze_single_leaf_updates_frozen_modules(model):
-    model.freeze("net.fc1", "net.fc2")
-    model.unfreeze("net.fc1")
+    model.freeze(["net.fc1", "net.fc2"])
+    model.unfreeze(["net.fc1"])
     assert "net.fc1" not in model._frozen_modules
     assert "net.fc2" in  model._frozen_modules
 
 
 def test_unfreeze_container_unfreezes_all_children(model):
-    model.freeze("net.conv1", "net.conv2")
-    model.unfreeze("net")
+    model.freeze(["net.conv1", "net.conv2"])
+    model.unfreeze(["net"])
     assert _frozen_params(model) == set()
     assert model._frozen_modules  == set()
 
 
 def test_unfreeze_nonfrozen_is_noop(model):
-    model.freeze("net.fc1")
-    model.unfreeze("net.fc2")
+    model.freeze(["net.fc1"])
+    model.unfreeze(["net.fc2"])
     assert not model.net.fc1.weight.requires_grad
     assert model.net.fc2.weight.requires_grad
     assert "net.fc1" in  model._frozen_modules
@@ -166,9 +166,9 @@ def test_unfreeze_nonfrozen_is_noop(model):
 
 
 def test_unfreeze_chained_freeze_unfreeze(model):
-    model.freeze("net.conv1", "net.conv2", "net.fc1")
-    model.unfreeze("net.conv1")
-    model.unfreeze("net.fc1")
+    model.freeze(["net.conv1", "net.conv2", "net.fc1"])
+    model.unfreeze(["net.conv1"])
+    model.unfreeze(["net.fc1"])
     fp = _frozen_params(model)
     assert "net.conv1.weight" not in fp
     assert "net.fc1.weight"   not in fp
@@ -180,15 +180,15 @@ def test_unfreeze_chained_freeze_unfreeze(model):
 # ===========================================================================
 
 def test_unfreeze_child_of_frozen_parent_unfreezes_child(model):
-    model.freeze("net")
-    model.unfreeze("net.fc3")
+    model.freeze(["net"])
+    model.unfreeze(["net.fc3"])
     assert model.net.fc3.weight.requires_grad
     assert model.net.fc3.bias.requires_grad
 
 
 def test_unfreeze_child_of_frozen_parent_keeps_siblings_frozen(model):
-    model.freeze("net")
-    model.unfreeze("net.fc3")
+    model.freeze(["net"])
+    model.unfreeze(["net.fc3"])
     fp = _frozen_params(model)
     for name in ALL_PARAMS:
         if not name.startswith("net.fc3"):
@@ -196,22 +196,22 @@ def test_unfreeze_child_of_frozen_parent_keeps_siblings_frozen(model):
 
 
 def test_unfreeze_child_removes_ancestor_rule(model):
-    model.freeze("net")
-    model.unfreeze("net.fc3")
+    model.freeze(["net"])
+    model.unfreeze(["net.fc3"])
     assert "net" not in model._frozen_modules
 
 
 def test_unfreeze_child_adds_sibling_rules(model):
-    model.freeze("net")
-    model.unfreeze("net.fc3")
+    model.freeze(["net"])
+    model.unfreeze(["net.fc3"])
     for sibling in ("net.conv1", "net.conv2", "net.fc1", "net.fc2"):
         assert sibling in model._frozen_modules, sibling
 
 
 def test_unfreeze_two_children_of_frozen_parent(model):
-    model.freeze("net")
-    model.unfreeze("net.fc2")
-    model.unfreeze("net.fc3")
+    model.freeze(["net"])
+    model.unfreeze(["net.fc2"])
+    model.unfreeze(["net.fc3"])
     assert model.net.fc2.weight.requires_grad
     assert model.net.fc3.weight.requires_grad
     assert not model.net.conv1.weight.requires_grad
@@ -223,25 +223,23 @@ def test_unfreeze_two_children_of_frozen_parent(model):
 # ===========================================================================
 
 def test_unfreeze_parent_removes_all_child_rules(model):
-    model.freeze("net.conv1", "net.conv2", "net.fc1", "net.fc2", "net.fc3")
-    model.unfreeze("net")
+    model.freeze(["net.conv1", "net.conv2", "net.fc1", "net.fc2", "net.fc3"])
+    model.unfreeze(["net"])
     assert _frozen_params(model)   == set()
     assert model._frozen_modules  == set()
 
 
 def test_unfreeze_parent_mixed_rules(model):
-    model.freeze("net.conv1")
-    model.freeze("net.fc1", "net.fc2")
-    model.unfreeze("net")
+    model.freeze(["net.conv1"])
+    model.freeze(["net.fc1", "net.fc2"])
+    model.unfreeze(["net"])
     assert _frozen_params(model)   == set()
     assert model._frozen_modules  == set()
 
 
 def test_unfreeze_parent_leaves_unrelated_modules(model):
-    # LeNetMentee only has "net" as a container, so freeze two children and
-    # unfreeze only through the parent; nothing outside "net" should be affected
-    model.freeze("net.fc1", "net.fc2")
-    model.unfreeze("net")
+    model.freeze(["net.fc1", "net.fc2"])
+    model.unfreeze(["net"])
     assert _frozen_params(model) == set()
 
 
@@ -250,16 +248,16 @@ def test_unfreeze_parent_leaves_unrelated_modules(model):
 # ===========================================================================
 
 def test_freeze_broad_then_narrow_stays_broad(model):
-    model.freeze("net")
-    model.freeze("net.fc1")
+    model.freeze(["net"])
+    model.freeze(["net.fc1"])
     assert "net" in model._frozen_modules
     assert "net.fc1" not in model._frozen_modules
 
 
 def test_freeze_broad_collapses_all_existing_fine_rules(model):
     for layer in ("net.conv1", "net.conv2", "net.fc1", "net.fc2", "net.fc3"):
-        model.freeze(layer)
-    model.freeze("net")
+        model.freeze([layer])
+    model.freeze(["net"])
     assert model._frozen_modules == {"net"}
     assert _frozen_params(model) == set(ALL_PARAMS)
 
@@ -269,20 +267,20 @@ def test_freeze_broad_collapses_all_existing_fine_rules(model):
 # ===========================================================================
 
 def test_freeze_returns_self(model):
-    assert model.freeze("net.fc1") is model
+    assert model.freeze(["net.fc1"]) is model
 
 
 def test_unfreeze_returns_self(model):
-    model.freeze("net.fc1")
-    assert model.unfreeze("net.fc1") is model
+    model.freeze(["net.fc1"])
+    assert model.unfreeze(["net.fc1"]) is model
 
 
-def test_unfreeze_no_args_returns_self(model):
-    assert model.unfreeze() is model
+def test_unfreeze_all_returns_self(model):
+    assert model.unfreeze([".*"]) is model
 
 
 def test_chain_freeze_unfreeze(model):
-    model.freeze("net.fc1").freeze("net.fc2").unfreeze("net.fc1")
+    model.freeze(["net.fc1"]).freeze(["net.fc2"]).unfreeze(["net.fc1"])
     assert model.net.fc1.weight.requires_grad
     assert not model.net.fc2.weight.requires_grad
 
@@ -292,7 +290,7 @@ def test_chain_freeze_unfreeze(model):
 # ===========================================================================
 
 def test_frozen_params_have_no_grad_after_backward(model):
-    model.freeze("net.fc3")
+    model.freeze(["net.fc3"])
     x = torch.randn(2, 1, 28, 28)
     loss = model(x).sum()
     loss.backward()
@@ -301,7 +299,7 @@ def test_frozen_params_have_no_grad_after_backward(model):
 
 
 def test_frozen_params_unchanged_after_optimizer_step(model):
-    model.freeze("net.fc3")
+    model.freeze(["net.fc3"])
     opt = torch.optim.SGD(
         [p for p in model.parameters() if p.requires_grad], lr=0.1
     )
@@ -313,7 +311,7 @@ def test_frozen_params_unchanged_after_optimizer_step(model):
 
 
 def test_trainable_params_change_after_optimizer_step(model):
-    model.freeze("net.fc3")
+    model.freeze(["net.fc3"])
     opt = torch.optim.SGD(
         [p for p in model.parameters() if p.requires_grad], lr=0.1
     )
@@ -329,7 +327,7 @@ def test_trainable_params_change_after_optimizer_step(model):
 # ===========================================================================
 
 def test_save_persists_frozen_modules(model):
-    model.freeze("net.fc1", "net.fc2")
+    model.freeze(["net.fc1", "net.fc2"])
     cp = _make_checkpoint(model)
     assert set(cp["frozen_modules"]) == {"net.fc1", "net.fc2"}
 
@@ -340,7 +338,7 @@ def test_save_persists_layer_names(model):
 
 
 def test_resume_restores_requires_grad(model, tmp_path):
-    model.freeze("net.fc3")
+    model.freeze(["net.fc3"])
     path = tmp_path / "m.pt"
     model.save(path)
     model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
@@ -351,7 +349,7 @@ def test_resume_restores_requires_grad(model, tmp_path):
 
 
 def test_resume_restores_frozen_modules_set(model, tmp_path):
-    model.freeze("net.conv1", "net.conv2")
+    model.freeze(["net.conv1", "net.conv2"])
     path = tmp_path / "m.pt"
     model.save(path)
     model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
@@ -360,8 +358,8 @@ def test_resume_restores_frozen_modules_set(model, tmp_path):
 
 
 def test_unfreeze_then_save_resume_is_trainable(model, tmp_path):
-    model.freeze("net")
-    model.unfreeze()
+    model.freeze(["net"])
+    model.unfreeze([".*"])
     path = tmp_path / "m.pt"
     model.save(path)
     model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
@@ -370,8 +368,8 @@ def test_unfreeze_then_save_resume_is_trainable(model, tmp_path):
 
 
 def test_resume_ancestor_expanded_state(model, tmp_path):
-    model.freeze("net")
-    model.unfreeze("net.fc3")
+    model.freeze(["net"])
+    model.unfreeze(["net.fc3"])
     path = tmp_path / "m.pt"
     model.save(path)
     model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
@@ -388,103 +386,121 @@ def test_save_no_freeze_empty_frozen_modules(model, tmp_path):
 
 
 # ===========================================================================
-# 9. _apply_layer_flags — CLI path (no model instantiation)
+# 9. _apply_layer_flags — CLI path (loads model from file, saves back)
 # ===========================================================================
 
-def test_apply_freeze_updates_checkpoint(model):
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=["net.fc1"], unfreeze=[])
-    assert "net.fc1" in cp["frozen_modules"]
+def test_apply_freeze_updates_checkpoint(model, tmp_path):
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=["net.fc1"], unfreeze=[])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    assert "net.fc1" in model2._frozen_modules
+    assert not model2.net.fc1.weight.requires_grad
 
 
-def test_apply_freeze_container(model):
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=["net"], unfreeze=[])
-    assert cp["frozen_modules"] == ["net"]
+def test_apply_freeze_container(model, tmp_path):
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=["net"], unfreeze=[])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    assert model2._frozen_modules == {"net"}
 
 
-def test_apply_unfreeze_exact(model):
-    model.freeze("net.fc1")
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=[], unfreeze=["net.fc1"])
-    assert "net.fc1" not in cp["frozen_modules"]
+def test_apply_unfreeze_exact(model, tmp_path):
+    model.freeze(["net.fc1"])
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=[], unfreeze=["net.fc1"])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    assert "net.fc1" not in model2._frozen_modules
+    assert model2.net.fc1.weight.requires_grad
 
 
-def test_apply_unfreeze_parent_clears_children(model):
-    model.freeze("net.conv1", "net.conv2", "net.fc1")
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=[], unfreeze=["net"])
-    assert cp["frozen_modules"] == []
+def test_apply_unfreeze_parent_clears_children(model, tmp_path):
+    model.freeze(["net.conv1", "net.conv2", "net.fc1"])
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=[], unfreeze=["net"])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    assert model2._frozen_modules == set()
 
 
-def test_apply_unfreeze_child_of_frozen_parent(model):
-    model.freeze("net")
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=[], unfreeze=["net.fc3"])
-    frozen = set(cp["frozen_modules"])
+def test_apply_unfreeze_child_of_frozen_parent(model, tmp_path):
+    model.freeze(["net"])
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=[], unfreeze=["net.fc3"])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    frozen = model2._frozen_modules
     assert "net"     not in frozen
     assert "net.fc3" not in frozen
     for sibling in ("net.conv1", "net.conv2", "net.fc1", "net.fc2"):
         assert sibling in frozen, sibling
 
 
-def test_apply_freeze_normalizes_descendants(model):
-    model.freeze("net.conv1")
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=["net"], unfreeze=[])
-    assert cp["frozen_modules"] == ["net"]
+def test_apply_freeze_normalizes_descendants(model, tmp_path):
+    model.freeze(["net.conv1"])
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=["net"], unfreeze=[])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    assert model2._frozen_modules == {"net"}
 
 
-def test_apply_sequential_freeze_then_unfreeze(model):
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=["net.fc1", "net.fc2"], unfreeze=[])
-    _apply_layer_flags(cp, freeze=[], unfreeze=["net.fc1"])
-    frozen = set(cp["frozen_modules"])
+def test_apply_sequential_freeze_then_unfreeze(model, tmp_path):
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=["net.fc1", "net.fc2"], unfreeze=[])
+    _apply_layer_flags(str(path), freeze=[], unfreeze=["net.fc1"])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    frozen = model2._frozen_modules
     assert "net.fc1" not in frozen
     assert "net.fc2" in  frozen
 
 
-def test_apply_freeze_and_unfreeze_same_call(model):
-    model.freeze("net.fc1")
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=["net.fc2"], unfreeze=["net.fc1"])
-    frozen = set(cp["frozen_modules"])
+def test_apply_freeze_and_unfreeze_same_call(model, tmp_path):
+    model.freeze(["net.fc1"])
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=["net.fc2"], unfreeze=["net.fc1"])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    frozen = model2._frozen_modules
     assert "net.fc1" not in frozen
     assert "net.fc2" in  frozen
 
 
-def test_apply_unknown_freeze_pattern_raises(model):
-    cp = _make_checkpoint(model)
+def test_apply_unknown_freeze_pattern_raises(model, tmp_path):
+    path = tmp_path / "m.pt"
+    model.save(path)
     with pytest.raises(ValueError, match="nonexistent"):
-        _apply_layer_flags(cp, freeze=["nonexistent"], unfreeze=[])
+        _apply_layer_flags(str(path), freeze=["nonexistent"], unfreeze=[])
 
 
-def test_apply_unknown_unfreeze_pattern_raises(model):
-    cp = _make_checkpoint(model)
+def test_apply_unknown_unfreeze_pattern_raises(model, tmp_path):
+    path = tmp_path / "m.pt"
+    model.save(path)
     with pytest.raises(ValueError, match="nonexistent"):
-        _apply_layer_flags(cp, freeze=[], unfreeze=["nonexistent"])
+        _apply_layer_flags(str(path), freeze=[], unfreeze=["nonexistent"])
 
 
-def test_apply_no_layer_names_raises():
-    cp = {"frozen_modules": [], "state_dict": {}}
-    with pytest.raises(ValueError, match="layer_names"):
-        _apply_layer_flags(cp, freeze=["anything"], unfreeze=[])
-
-
-def test_apply_regex_freeze(model):
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=[r"net\.fc.*"], unfreeze=[])
-    frozen = set(cp["frozen_modules"])
+def test_apply_regex_freeze(model, tmp_path):
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=[r"net\.fc.*"], unfreeze=[])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    frozen = model2._frozen_modules
     for layer in ("net.fc1", "net.fc2", "net.fc3"):
         assert layer in frozen
     assert "net.conv1" not in frozen
 
 
-def test_apply_regex_unfreeze(model):
-    model.freeze("net.fc1", "net.fc2", "net.fc3")
-    cp = _make_checkpoint(model)
-    _apply_layer_flags(cp, freeze=[], unfreeze=[r"net\.fc.*"])
-    assert cp["frozen_modules"] == []
+def test_apply_regex_unfreeze(model, tmp_path):
+    model.freeze(["net.fc1", "net.fc2", "net.fc3"])
+    path = tmp_path / "m.pt"
+    model.save(path)
+    _apply_layer_flags(str(path), freeze=[], unfreeze=[r"net\.fc.*"])
+    model2 = LeNetMentee.resume(path, model_class=LeNetMentee)
+    assert model2._frozen_modules == set()
 
 
 # ===========================================================================

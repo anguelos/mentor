@@ -46,7 +46,8 @@
       "Bash(python -m pytest tests/)",
       "Bash(pip show:*)",
       "Skill(update-config)",
-      "Read(//home/anguelos_ro/.claude/**)"
+      "Read(//home/anguelos_ro/.claude/**)",
+      "Bash(head -20 echo \"---\" grep \"ruff\\\\|black\" /home/anguelos_ro/workspace/src/torch_mentor/setup.py)"
     ],
     "defaultMode": "acceptEdits"
   }

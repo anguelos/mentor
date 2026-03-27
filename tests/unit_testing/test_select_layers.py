@@ -90,7 +90,7 @@ def test_same_pattern_twice_no_duplicates(model):
 # ---------------------------------------------------------------------------
 
 def test_freeze_layers_exact(model):
-    model.freeze_layers(["net.fc1"])
+    model.freeze(["net.fc1"])
     frozen = {n for n, p in model.named_parameters() if not p.requires_grad}
     assert "net.fc1.weight" in frozen
     assert "net.fc1.bias"   in frozen
@@ -98,7 +98,7 @@ def test_freeze_layers_exact(model):
 
 
 def test_freeze_layers_regex(model):
-    model.freeze_layers([r"net\.fc.*"])
+    model.freeze([r"net\.fc.*"])
     frozen = {n for n, p in model.named_parameters() if not p.requires_grad}
     for suffix in ("net.fc1.weight", "net.fc2.weight", "net.fc3.weight"):
         assert suffix in frozen
@@ -106,39 +106,39 @@ def test_freeze_layers_regex(model):
 
 
 def test_unfreeze_layers_restores_grad(model):
-    model.freeze_layers([r"net\.fc.*"])
-    model.unfreeze_layers([r"net\.fc.*"])
+    model.freeze([r"net\.fc.*"])
+    model.unfreeze([r"net\.fc.*"])
     for _, p in model.named_parameters():
         assert p.requires_grad
 
 
 def test_freeze_layers_updates_frozen_modules(model):
-    model.freeze_layers(["net.conv1", "net.conv2"])
+    model.freeze(["net.conv1", "net.conv2"])
     assert "net.conv1" in model._frozen_modules
     assert "net.conv2" in model._frozen_modules
     assert "net.fc1"   not in model._frozen_modules
 
 
 def test_unfreeze_layers_updates_frozen_modules(model):
-    model.freeze_layers([r"net\.conv.*"])
-    model.unfreeze_layers(["net.conv1"])
+    model.freeze([r"net\.conv.*"])
+    model.unfreeze(["net.conv1"])
     assert "net.conv1" not in model._frozen_modules
     assert "net.conv2" in model._frozen_modules
 
 
 def test_freeze_layers_no_match_raises(model):
     with pytest.raises(ValueError, match="nonexistent"):
-        model.freeze_layers(["nonexistent"])
+        model.freeze(["nonexistent"])
 
 
 def test_unfreeze_layers_no_match_raises(model):
     with pytest.raises(ValueError, match="nonexistent"):
-        model.unfreeze_layers(["nonexistent"])
+        model.unfreeze(["nonexistent"])
 
 
 def test_freeze_then_unfreeze_all_restores_everything(model):
-    model.freeze_layers([".*"])
+    model.freeze([".*"])
     assert all(not p.requires_grad for p in model.parameters())
-    model.unfreeze()
+    model.unfreeze([".*"])
     assert all(p.requires_grad for p in model.parameters())
     assert model._frozen_modules == set()

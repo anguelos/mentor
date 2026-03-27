@@ -336,55 +336,42 @@ def get_report_str(path: str, render_colors: bool = False, verbose: bool = False
 
 
 def _apply_layer_flags(
-    checkpoint: Dict[str, Any],
+    path: str,
     freeze: List[str],
     unfreeze: List[str],
 ) -> None:
-    """Mutate *checkpoint* in-place: update ``frozen_modules`` from patterns.
+    """Load a checkpoint, apply freeze/unfreeze patterns, and save it back.
 
-    Uses the ``layer_names`` list stored in the checkpoint so no model
-    instantiation is required.  Raises :exc:`ValueError` if any pattern
-    does not match a layer name (mirrors :meth:`~mentor.Mentee.select_layers`).
+    Instantiates the :class:`~mentor.Mentee` subclass stored in the checkpoint,
+    delegates to :meth:`~mentor.Mentee.unfreeze` then
+    :meth:`~mentor.Mentee.freeze` (both use ``re.fullmatch`` via
+    :meth:`~mentor.Mentee.select_layers`), and writes the updated checkpoint
+    back to *path*.
+
+    Parameters
+    ----------
+    path : str
+        Path to the ``.pt`` checkpoint file.  The file is overwritten in place.
+    freeze : list of str
+        ``re.fullmatch`` patterns selecting layers to freeze.
+    unfreeze : list of str
+        ``re.fullmatch`` patterns selecting layers to unfreeze.
+        Applied before *freeze*, so a name in both lists ends up frozen.
+
+    Raises
+    ------
+    ValueError
+        If any pattern does not match any layer name (propagated from
+        :meth:`~mentor.Mentee.select_layers`).
     """
-    import re as _re
+    from mentor.mentee import Mentee
 
-    layer_names: List[str] = checkpoint.get("layer_names", [])
-    if not layer_names and (freeze or unfreeze):
-        raise ValueError(
-            "Checkpoint does not contain layer_names. "
-            "Re-save the model with a current version of mentor to enable "
-            "-freeze / -unfreeze from the CLI."
-        )
-
-    def _select(patterns: List[str]) -> List[str]:
-        matched: List[str] = []
-        seen: set = set()
-        for pat in patterns:
-            hits = [n for n in layer_names if _re.fullmatch(pat, n)]
-            if not hits:
-                raise ValueError(
-                    f"Pattern {pat!r} did not match any layer name. "
-                    f"Available names: {layer_names}"
-                )
-            for n in hits:
-                if n not in seen:
-                    seen.add(n)
-                    matched.append(n)
-        return matched
-
-    frozen: set = set(checkpoint.get("frozen_modules", []))
+    model: Mentee = Mentee.resume(path)
     if unfreeze:
-        targets = _select(unfreeze)
-        frozen = _unfreeze_in_frozen_set(frozen, targets, layer_names)
+        model.unfreeze(unfreeze)
     if freeze:
-        for name in _select(freeze):
-            # Remove any existing finer-grained rules subsumed by this new rule
-            frozen = {
-                existing for existing in frozen
-                if not (existing == name or existing.startswith(name + "."))
-            }
-            frozen.add(name)
-    checkpoint["frozen_modules"] = sorted(frozen)
+        model.freeze(freeze)
+    model.save(path)
 
 
 def main_report_file() -> None:
@@ -405,13 +392,11 @@ def main_report_file() -> None:
     unfreeze_patterns = list(p.unfreeze)
 
     if freeze_patterns or unfreeze_patterns:
-        checkpoint = torch.load(p.path, weights_only=False, map_location="cpu")
         try:
-            _apply_layer_flags(checkpoint, freeze_patterns, unfreeze_patterns)
+            _apply_layer_flags(p.path, freeze_patterns, unfreeze_patterns)
         except ValueError as exc:
             print(f"Error: {exc}")
             raise SystemExit(1)
-        torch.save(checkpoint, p.path)
 
     report = get_report_str(p.path, render_colors=not p.no_colors, verbose=p.verbose)
     print(report)

@@ -5,6 +5,9 @@
 [![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/anguelos/torch_mentor/badges/badges/coverage.json)](https://github.com/anguelos/torch_mentor/actions/workflows/tests.yml)
 [![Docs](https://readthedocs.org/projects/torch-mentor/badge/?version=latest)](https://torch-mentor.readthedocs.io/en/latest/)
 [![PyPI](https://img.shields.io/pypi/v/torch-mentor)](https://pypi.org/project/torch-mentor/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/torch-mentor)](https://pypi.org/project/torch-mentor/)
+[![GitHub repo size](https://img.shields.io/github/repo-size/anguelos/torch_mentor)](https://github.com/anguelos/torch_mentor)
+[![GitHub last commit](https://img.shields.io/github/last-commit/anguelos/torch_mentor)](https://github.com/anguelos/torch_mentor/commits/main)
 
 A lightweight PyTorch training framework built around a single idea: **a model should carry its own training history**.
 

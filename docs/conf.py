@@ -1,121 +1,109 @@
+"""Sphinx configuration for mentor documentation."""
+
 import os
 import sys
-import inspect
-import importlib
 
 sys.path.insert(0, os.path.abspath(".."))
 
-# Mock heavy dependencies so autodoc can import mentor on RTD without PyTorch installed
-autodoc_mock_imports = [
-    "torch",
-    "torchvision",
-    "tqdm",
-    "matplotlib",
-    "seaborn",
-    "tensorboard",
-    "fargv",
-]
-
-project   = "torch-mentor"
-author    = "mentor contributors"
-copyright = f"2024, {author}"
-release   = "0.2.2"
+project = "mentor"
+copyright = "anguelos"
+author = "anguelos"
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
-    "sphinx.ext.linkcode",      # replaces viewcode: emits [source] links to GitHub
+    "sphinx.ext.linkcode",
     "sphinx.ext.intersphinx",
+    "sphinx.ext.doctest",
     "myst_parser",
     "sphinx_copybutton",
-    "nbsphinx",
+    "sphinx_design",
 ]
 
-# Napoleon — NumPy docstrings only
-napoleon_numpy_docstring   = True
-napoleon_google_docstring  = False
-napoleon_use_param         = True
-napoleon_use_rtype         = True
+myst_enable_extensions = ["colon_fence"]
 
-# autodoc — types are documented in NumPy sections; suppress annotation injection
-autodoc_member_order       = "bysource"
-autodoc_typehints          = "none"
-autoclass_content          = "both"
-autodoc_default_options    = {
-    "members":          True,
-    "undoc-members":    False,
-    "show-inheritance": True,
-    "special-members":  "__init__, __repr__, __str__",
-}
-
+# ---------------------------------------------------------------------------
 # intersphinx
+# ---------------------------------------------------------------------------
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
-    "torch":  ("https://pytorch.org/docs/stable", None),
+    "torch": ("https://pytorch.org/docs/stable", None),
 }
 
-# MyST
-myst_enable_extensions = ["colon_fence", "deflist"]
-
-html_theme         = "sphinx_rtd_theme"
-html_static_path   = ["_static"]
-html_title         = "torch-mentor"
-html_show_sourcelink = True
-
-# RTD "Edit on GitHub" button and per-object GitHub source links
-html_context = {
-    "display_github": True,
-    "github_user":    "anguelos",
-    "github_repo":    "torch_mentor",
-    "github_version": "main",
-    "conf_py_path":   "/docs/",
+# ---------------------------------------------------------------------------
+# autodoc / autosummary
+# ---------------------------------------------------------------------------
+autosummary_generate = True
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": False,
+    "show-inheritance": True,
 }
+
+# ---------------------------------------------------------------------------
+# napoleon (numpy docstrings)
+# ---------------------------------------------------------------------------
+napoleon_numpy_docstring = True
+napoleon_google_docstring = False
+
+# ---------------------------------------------------------------------------
+# linkcode — point [source] links to GitHub
+# ---------------------------------------------------------------------------
+_GITHUB_ROOT = "https://github.com/anguelos/torch_mentor/blob/main"
 
 
 def linkcode_resolve(domain, info):
-    """Return a GitHub URL pointing to the source of a Python object."""
-    if domain != "py":
+    """Map a Python object to its GitHub source URL."""
+    if domain != "py" or not info["module"]:
         return None
-    module = info.get("module")
-    fullname = info.get("fullname")
-    if not module:
-        return None
+    import importlib
+    import inspect
+
     try:
-        mod = importlib.import_module(module)
-        obj = mod
-        for part in fullname.split("."):
-            obj = getattr(obj, part, None)
-            if obj is None:
-                break
-        # Unwrap decorated functions / classmethods so inspect can find the source
-        try:
-            obj = inspect.unwrap(obj)
-        except Exception:
-            pass
-        try:
-            src_file = inspect.getfile(obj)
-            lines, start = inspect.getsourcelines(obj)
-            anchor = f"#L{start}-L{start + len(lines) - 1}"
-        except (TypeError, OSError):
-            src_file = inspect.getfile(mod)
-            anchor = ""
-        root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        rel = os.path.relpath(src_file, root)
-        if rel.startswith(".."):
-            return None
-        return f"https://github.com/anguelos/torch_mentor/blob/main/{rel}{anchor}"
-    except Exception:
+        mod = importlib.import_module(info["module"])
+    except ImportError:
         return None
 
+    obj = mod
+    for part in (info.get("fullname") or "").split("."):
+        try:
+            obj = getattr(obj, part)
+        except AttributeError:
+            return None
 
-# single-page HTML
-singlehtml_sidebars = {"**": ["globaltoc.html", "relations.html"]}
+    # Unwrap decorated / bound objects
+    obj = inspect.unwrap(obj)
 
-# LaTeX / PDF
-latex_elements = {
-    "papersize": "a4paper",
-    "pointsize": "10pt",
-}
-latex_documents = [
-    ("index", "mentor.tex", "mentor Documentation", author, "manual"),
-]
+    try:
+        src_file = inspect.getfile(obj)
+        lines, start = inspect.getsourcelines(obj)
+    except (TypeError, OSError):
+        return None
+
+    # Make path relative to the repo root
+    try:
+        rel = os.path.relpath(src_file, os.path.join(os.path.dirname(__file__), ".."))
+    except ValueError:
+        return None
+
+    end = start + len(lines) - 1
+    return f"{_GITHUB_ROOT}/{rel}#L{start}-L{end}"
+
+
+# ---------------------------------------------------------------------------
+# copybutton
+# ---------------------------------------------------------------------------
+copybutton_prompt_text = r">>> |\.\.\. |\$ "
+copybutton_prompt_is_regexp = True
+
+# ---------------------------------------------------------------------------
+# HTML output
+# ---------------------------------------------------------------------------
+templates_path = ["_templates"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+html_theme = "sphinx_rtd_theme"
+html_static_path = ["_static"]

@@ -1,4 +1,5 @@
 import inspect
+import os
 import re
 import sys
 import socket
@@ -1571,11 +1572,13 @@ class Mentee(nn.Module):
     # Checkpoint save / resume
     # ------------------------------------------------------------------
 
-    def freeze(self, *module_names: str) -> "Mentee":
+    def _freeze_prefixes(self, *module_names: str) -> "Mentee":
         """Freeze parameters whose names start with any of *module_names*.
 
-        The frozen set is persisted in every checkpoint so it is restored
-        automatically by :meth:`resume` and :meth:`resume_training`.
+        Internal prefix-based implementation used by :meth:`freeze` and
+        checkpoint restore.  The frozen set is persisted in every checkpoint
+        so it is restored automatically by :meth:`resume` and
+        :meth:`resume_training`.
 
         When a broad ancestor rule is added (e.g. ``"iunet"``) any existing
         finer-grained rules already in ``_frozen_modules`` that are covered
@@ -1611,8 +1614,8 @@ class Mentee(nn.Module):
             self._frozen_modules.add(m)
         return self
 
-    def unfreeze(self, *module_names: str) -> "Mentee":
-        """Unfreeze parameters.  Call with no arguments to unfreeze everything.
+    def _unfreeze_prefixes(self, *module_names: str) -> "Mentee":
+        """Unfreeze parameters by prefix.  Call with no arguments to unfreeze everything.
 
         Handles ancestor expansion: if ``"iunet"`` is frozen and you call
         ``unfreeze("iunet.downsampling_layers")``, the ``"iunet"`` rule is
@@ -1717,12 +1720,12 @@ class Mentee(nn.Module):
         order = {n: i for i, n in enumerate(all_names)}
         return sorted(matched, key=lambda n: order[n])
 
-    def freeze_layers(self, layers: List[str]) -> "Mentee":
-        """Freeze modules selected by :meth:`select_layers`.
+    def freeze(self, patterns: List[str]) -> "Mentee":
+        """Freeze layers selected by ``re.fullmatch`` patterns.
 
         Parameters
         ----------
-        layers : list[str]
+        patterns : list[str]
             Exact names or ``re.fullmatch`` patterns matched against
             :attr:`layer_names`.
 
@@ -1731,17 +1734,17 @@ class Mentee(nn.Module):
         Mentee
             *self*, for chaining.
         """
-        matched = self.select_layers(layers)
+        matched = self.select_layers(patterns)
         if matched:
-            self.freeze(*matched)
+            self._freeze_prefixes(*matched)
         return self
 
-    def unfreeze_layers(self, layers: List[str]) -> "Mentee":
-        """Unfreeze modules selected by :meth:`select_layers`.
+    def unfreeze(self, patterns: List[str]) -> "Mentee":
+        """Unfreeze layers selected by ``re.fullmatch`` patterns.
 
         Parameters
         ----------
-        layers : list[str]
+        patterns : list[str]
             Exact names or ``re.fullmatch`` patterns matched against
             :attr:`layer_names`.
 
@@ -1750,10 +1753,11 @@ class Mentee(nn.Module):
         Mentee
             *self*, for chaining.
         """
-        matched = self.select_layers(layers)
+        matched = self.select_layers(patterns)
         if matched:
-            self.unfreeze(*matched)
+            self._unfreeze_prefixes(*matched)
         return self
+
 
     def save(
         self,
@@ -1819,6 +1823,8 @@ class Mentee(nn.Module):
         cls,
         path: Union[str, Path],
         model_class: Optional[Type["Mentee"]] = None,
+        instantiate_on_fail: bool = True,
+        **kwargs: Any,
     ) -> "Mentee":
         """Load a checkpoint saved by :meth:`save` and return the model.
 
@@ -1826,21 +1832,36 @@ class Mentee(nn.Module):
         ``class_module`` / ``class_name`` fields stored in the checkpoint
         using :func:`importlib.import_module`.
 
+        If *path* does not exist and *instantiate_on_fail* is ``True``,
+        *model_class* is instantiated fresh with ``**kwargs`` and returned.
+        This lets training scripts treat a missing checkpoint as "start from
+        scratch" without extra boilerplate.
+
         Parameters
         ----------
         path : str or pathlib.Path
             Path to the ``.pt`` file, or a file-like object.
         model_class : type, optional
             Explicit subclass to instantiate.  Required when the checkpoint's
-            module is not importable in the current environment.
+            module is not importable in the current environment, and required
+            when *instantiate_on_fail* is ``True``.
+        instantiate_on_fail : bool, optional
+            When ``True`` (default) and *path* does not exist, return a freshly
+            constructed *model_class* instance built with ``**kwargs`` instead
+            of raising :exc:`FileNotFoundError`.
+        **kwargs : Any
+            Constructor arguments forwarded to *model_class* when
+            *instantiate_on_fail* is triggered.
 
         Returns
         -------
         Mentee
-            Fully restored model with weights and history, placed on CPU.
+            Fully restored model (from checkpoint) or a fresh instance.
 
         Raises
         ------
+        FileNotFoundError
+            If *path* does not exist and *instantiate_on_fail* is ``False``.
         ImportError
             If *model_class* is ``None`` and the checkpoint's module cannot
             be imported.
@@ -1851,7 +1872,25 @@ class Mentee(nn.Module):
         --------
         >>> model = Mentee.resume("checkpoint.pt", model_class=MyNet)
         >>> model.eval()
+
+        Start from scratch when no checkpoint exists yet::
+
+        >>> model = Mentee.resume(
+        ...     "run/checkpoint.pt",
+        ...     model_class=MyNet,
+        ...     num_classes=10,
+        ... )
         """
+        if isinstance(path, (str, os.PathLike)) and not Path(path).exists():
+            if instantiate_on_fail:
+                if model_class is None:
+                    raise ValueError(
+                        "model_class must be provided when instantiate_on_fail=True "
+                        "and the checkpoint file does not exist."
+                    )
+                return model_class(**kwargs)
+            raise FileNotFoundError(f"Checkpoint not found: {path}")
+
         checkpoint = torch.load(path, weights_only=False)
 
         if model_class is None:
@@ -1869,7 +1908,7 @@ class Mentee(nn.Module):
         instance._best_epoch_so_far = checkpoint["best_epoch_so_far"]
         frozen = checkpoint.get("frozen_modules", [])
         if frozen:
-            instance.freeze(*frozen)
+            instance._freeze_prefixes(*frozen)
         instance._inference_state = checkpoint.get("inference_state", {})
         instance._default_loss_fn = checkpoint.get("default_loss_fn", None)
         return instance
@@ -1884,13 +1923,19 @@ class Mentee(nn.Module):
         path: Union[str, Path],
         model_class: Optional[Type["Mentee"]] = None,
         device: Optional[Union[str, torch.device]] = None,
-        **create_train_objects_kwargs: Any,
+        instantiate_on_fail: bool = True,
+        **kwargs: Any,
     ) -> Tuple["Mentee", ...]:
         """Load a checkpoint and reconstruct everything needed to continue training.
 
         Restores model weights and history, moves the model to *device*,
         calls :meth:`create_train_objects`, and restores optimiser and
         scheduler state if present in the checkpoint.
+
+        If *path* does not exist and *instantiate_on_fail* is ``True``,
+        *model_class* is instantiated fresh with the constructor arguments
+        extracted from ``**kwargs``, then :meth:`create_train_objects` is
+        called with the remaining keyword arguments.
 
         Parameters
         ----------
@@ -1901,8 +1946,16 @@ class Mentee(nn.Module):
         device : str or torch.device, optional
             Target device, e.g. ``"cuda"`` or ``"cpu"``.  If ``None`` the
             model stays on CPU as loaded.
-        **create_train_objects_kwargs : Any
-            Forwarded to :meth:`create_train_objects` (e.g. ``lr=1e-4``).
+        instantiate_on_fail : bool, optional
+            When ``True`` (default) and *path* does not exist, instantiate
+            *model_class* fresh with ``**kwargs`` and call
+            :meth:`create_train_objects` with those same kwargs instead of
+            raising :exc:`FileNotFoundError`.
+        **kwargs : Any
+            Passed to :meth:`create_train_objects` (e.g. ``lr=1e-4``).
+            When *instantiate_on_fail* triggers, also forwarded to the
+            *model_class* constructor (unknown keys are silently ignored by
+            :meth:`create_train_objects`, constructor errors surface normally).
 
         Returns
         -------
@@ -1910,13 +1963,44 @@ class Mentee(nn.Module):
             ``(model, optimizer, lr_scheduler)`` — the same objects returned
             by :meth:`create_train_objects`, prepended with the loaded model.
 
+        Raises
+        ------
+        FileNotFoundError
+            If *path* does not exist and *instantiate_on_fail* is ``False``.
+
         Examples
         --------
         >>> model, opt, sched = Mentee.resume_training(
         ...     "checkpoint.pt", model_class=MyNet, device="cuda", lr=1e-4
         ... )
         >>> model.train_epoch(train_loader, opt, sched)
+
+        Start from scratch when no checkpoint exists yet::
+
+        >>> model, opt, sched = MyNet.resume_training(
+        ...     "run/checkpoint.pt",
+        ...     model_class=MyNet,
+        ...     device="cuda",
+        ...     pretrained=True,
+        ...     lr=1e-4,
+        ... )
         """
+        if isinstance(path, (str, os.PathLike)) and not Path(path).exists():
+            if instantiate_on_fail:
+                if model_class is None:
+                    raise ValueError(
+                        "model_class must be provided when instantiate_on_fail=True "
+                        "and the checkpoint file does not exist."
+                    )
+                instance: Mentee = model_class(**kwargs)
+                if device is not None:
+                    instance.to(device)
+                train_objects = instance.create_train_objects(**kwargs)
+                optimizer = train_objects["optimizer"]
+                lr_scheduler = train_objects["lr_scheduler"]
+                return instance, optimizer, lr_scheduler
+            raise FileNotFoundError(f"Checkpoint not found: {path}")
+
         checkpoint = torch.load(path, weights_only=False)
 
         if model_class is None:
@@ -1934,14 +2018,14 @@ class Mentee(nn.Module):
         instance._best_epoch_so_far = checkpoint["best_epoch_so_far"]
         frozen = checkpoint.get("frozen_modules", [])
         if frozen:
-            instance.freeze(*frozen)
+            instance._freeze_prefixes(*frozen)
         instance._inference_state = checkpoint.get("inference_state", {})
         instance._default_loss_fn = checkpoint.get("default_loss_fn", None)
 
         if device is not None:
             instance.to(device)
 
-        train_objects = instance.create_train_objects(**create_train_objects_kwargs)
+        train_objects = instance.create_train_objects(**kwargs)
         optimizer = train_objects["optimizer"]
         lr_scheduler = train_objects["lr_scheduler"]
 
