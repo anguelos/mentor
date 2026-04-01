@@ -27,7 +27,7 @@ import torchvision
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.models.resnet import BasicBlock
-from fargv import fargv
+import fargv
 
 from mentor import Mentee
 from mentor.trainers import MentorTrainer
@@ -217,41 +217,25 @@ def make_loaders(data_dir: str, batch_size: int, num_workers: int):
     return train, val
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-params = {
-    "epochs":      [200,                    "Total epochs (paper uses ~182 to hit 64K iterations)"],
-    "batch_size":  [128,                    "Samples per batch"],
-    "lr":          [0.1,                    "Initial learning rate"],
-    "resume_path": ["./tmp/resnet56.pt",    "Checkpoint path"],
-    "data":        ["./tmp/data",           "CIFAR-10 data directory"],
-    "device":      ["cuda",                 "Training device"],
-    "verbose":     [False,                  "tqdm progress bars"],
-    "num_workers": [2,                      "DataLoader workers"],
-}
-
-
-def main():
-    p, _ = fargv(params)
-    train_loader, val_loader = make_loaders(p.data, p.batch_size, p.num_workers)
+def main(epochs: int=200, batch_size: int=128, lr: float=0.1, resume_path: str="./tmp/resnet56.pt", 
+         data: str="./tmp/data", device: str="cuda", verbose: bool=False, num_workers: int=2):
+    train_loader, val_loader = make_loaders(data, batch_size, num_workers)
 
     model, opt, sched = CifarResNet56.resume_training(
-        p.resume_path,
+        resume_path,
         model_class=CifarResNet56,
-        device=p.device,
-        lr=p.lr,
+        device=device,
+        lr=lr,
         tolerate_irresumable_trainstate=True,
     )
 
     model.fit(
         train_loader,
         val_data=val_loader,
-        epochs=p.epochs,
-        lr=p.lr,
-        checkpoint_path=p.resume_path,
-        verbose=p.verbose,
+        epochs=epochs,
+        lr=lr,
+        checkpoint_path=resume_path,
+        verbose=verbose,
     )
 
     best = model._validate_history.get(model._best_epoch_so_far, {})
@@ -261,4 +245,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    p, _ = fargv.parse_and_launch(main)

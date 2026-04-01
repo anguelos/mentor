@@ -1452,6 +1452,8 @@ class Mentee(nn.Module):
                     verbose=verbose,
                 )
                 if checkpoint_path is not None and save_freq > 0:
+                    if verbose:
+                        print(f"Saving initial weights to {checkpoint_path}...", flush=True, file=sys.stderr)
                     self.save(checkpoint_path)
                 if verbose:
                     val_str = "  ".join(f"{k}={v:.4f}" for k, v in val_metrics.items()

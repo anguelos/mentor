@@ -532,46 +532,69 @@ def _apply_lr_coefficient(path: str, patterns: List[str], coefficient: float) ->
 
 
 def main_checkpoint() -> None:
-    from fargv import fargv
+    import fargv
+    from dataclasses import dataclass
     params = {
-        "path":             ["",      "Path to mentor checkpoint file"],
-        "no_colors":        [False,   "Disable terminal colour output"],
-        "verbose":          [False,   "Print extra detail"],
-        "freeze":           [set([]), "Layer name patterns to freeze (regex, e.g. backbone\\.layer4\\..*)"],
-        "unfreeze":         [set([]), "Layer name patterns to unfreeze (regex)"],
-        "modify_lr_layers": [set([]), "Layer name patterns whose LR coefficient will be set to -lr_coef"],
-        "lr_coef":          [1.0,    "LR coefficient to assign to -modify_lr_layers (must not be 1.0 when -modify_lr_layers is empty)"],
+        "paths": [],
+        "no_colors": False,
+        "cmd": {
+            "view": {},  # no args
+            "freeze": {
+                "layers": fargv.FargvPositional(default=[], description="Layer name patterns to freeze (regex, e.g. backbone\\.layer4\\..*)"),
+            },
+            "unfreeze": {
+                "layers": fargv.FargvPositional(default=[], description="Layer name patterns to unfreeze (regex, e.g. backbone\\.layer4\\..*)"),
+            },
+            "modify_lr_layers": {
+                "layers": fargv.FargvPositional(default=[], description="Layer name patterns whose LR coefficient will be set to -lr_coef"),
+                "lr_coef": 1.0,
+            }
+        }
     }
-    p, _ = fargv(params)
-    if not p.path:
+    p, _ = fargv.parse(params)
+    print(p)
+    if not p.paths:
         print("Error: -path is required.")
         raise SystemExit(1)
 
-    if p.lr_coef != 1.0 and not p.modify_lr_layers:
-        print("Error: -lr_coef is set to a non-default value but -modify_lr_layers is empty. "
-              "Specify at least one layer pattern with -modify_lr_layers.")
-        raise SystemExit(1)
-
-    freeze_patterns    = list(p.freeze)
-    unfreeze_patterns  = list(p.unfreeze)
-    lr_layer_patterns  = list(p.modify_lr_layers)
-
-    if freeze_patterns or unfreeze_patterns:
-        try:
-            _apply_layer_flags(p.path, freeze_patterns, unfreeze_patterns)
-        except ValueError as exc:
-            print(f"Error: {exc}")
-            raise SystemExit(1)
-
-    if lr_layer_patterns:
-        try:
-            _apply_lr_coefficient(p.path, lr_layer_patterns, p.lr_coef)
-        except ValueError as exc:
-            print(f"Error: {exc}")
-            raise SystemExit(1)
-
-    report = get_report_str(p.path, terminal_colors=not p.no_colors, verbose=p.verbose)
-    print(report)
+    for path in p.paths:
+        if p.cmd == "freeze":
+            assert p.layers != [], "At least one pattern is required to freeze layers."
+            try:
+                _apply_layer_flags(path, p.layers, [])
+            except ValueError as exc:
+                print(f"Error: {exc}")
+                raise SystemExit(1)
+            if p.verbose:
+                report = get_report_str(path, terminal_colors=not p.no_colors, verbose=p.verbose)
+                print(report)
+                print(f"Completed Freeze layers matching: {p.layers}")
+        elif p.cmd == "unfreeze":
+            assert p.layers != [], "At least one pattern is required to unfreeze layers."
+            try:
+                _apply_layer_flags(path, [], p.layers)
+            except ValueError as exc:
+                print(f"Error: {exc}")
+                raise SystemExit(1)
+            report = get_report_str(path, terminal_colors=not p.no_colors, verbose=p.verbose)
+            print(report)
+            print(f"Completed Unfreeze layers matching: {p.layers}")
+        elif p.cmd == "modify_lr_layers":
+            assert p.layers != [], "At least one pattern is required to modify LR coefficients."
+            try:
+                _apply_lr_coefficient(path, p.layers, p.lr_coef)
+            except ValueError as exc:
+                print(f"Error: {exc}")
+                raise SystemExit(1)
+            if p.verbose:
+                report = get_report_str(path, terminal_colors=not p.no_colors, verbose=p.verbose)
+                print(report)
+                print(f"Completed Set LR coefficient to {p.lr_coef} for layers matching: {p.layers}")
+        elif p.cmd == "view":
+            print(f"p:")
+            print(dir(p))
+            report = get_report_str(path, terminal_colors=not p.no_colors, verbose=bool(p.verbosity))
+            print(report)
 
 
 def _discover_values(checkpoint: Dict[str, Any]) -> List[str]:
@@ -712,15 +735,15 @@ def plot_history(
 def main_plot_file_hist() -> None:
     from fargv import fargv
     import matplotlib.pyplot as plt
+    
+    @dataclass
+    class TrainConfig:
+        paths = fargv.FargvPositional(default=[], description="Checkpoint files to plot, e.g. -paths a.pt b.pt c.pt"),
+        values = fargv.FargvPositional(default=[], description="Metrics to plot in split/metric form, e.g. -values train/loss validate/acc (empty = all)"),
+        overlay = fargv.FargvBool(default=False, description="Overlay all metrics on a single axis instead of separate subplots"),
+        output =  fargv.FargvStr(default="", description="Save figure to this path (empty = show interactively)"),
 
-    params = {
-        "paths":   [set([]),  "Checkpoint files to compare, e.g. -paths a.pt b.pt c.pt"],
-        "values":  [set([]),  "Metrics to plot, e.g. train/loss validate/accuracy (empty = all)"],
-        "overlay": [False,    "Overlay all metrics and files on a single axis"],
-        "output":  ["",       "Save figure to this path (empty = show interactively)"],
-        "verbose": [False,    "Print discovered metrics and file list"],
-    }
-    p, _ = fargv(params)
+    p, _ = fargv.parse(TrainConfig)
     paths = list(p.paths)
     if not paths:
         print("Error: -paths requires at least one file, e.g. -paths a.pt b.pt c.pt")
